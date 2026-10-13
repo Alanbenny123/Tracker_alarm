@@ -9,6 +9,10 @@ class AlarmActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             "tracker_alarm.STOP" -> {
                 val pending = goAsync()
+                AlarmRuntime.dismissCurrent(context, done = { pending.finish() })
+            }
+            "tracker_alarm.END_TRIP" -> {
+                val pending = goAsync()
                 AlarmRuntime.finish(context, "completed", done = { pending.finish() })
             }
             "tracker_alarm.SNOOZE" -> AlarmRuntime.snooze(context, 1)

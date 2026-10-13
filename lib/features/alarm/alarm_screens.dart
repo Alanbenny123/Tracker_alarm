@@ -19,6 +19,9 @@ String _formatEta(Duration duration) {
   return '${duration.inMinutes < 1 ? 1 : duration.inMinutes} min';
 }
 
+String _formatDateTime(BuildContext context, DateTime value) =>
+    '${MaterialLocalizations.of(context).formatMediumDate(value)} at ${TimeOfDay.fromDateTime(value).format(context)}';
+
 class AlarmSetupScreen extends ConsumerStatefulWidget {
   const AlarmSetupScreen({super.key, required this.place});
   final Place place;
@@ -37,7 +40,8 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   late final TextEditingController radiusController;
   String radiusUnit = 'm';
   String? radiusError;
-  TimeOfDay? alertTime;
+  DateTime? targetTime;
+  int leadMinutes = 0;
   late bool vibration;
   late String sound;
   @override
@@ -128,6 +132,34 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     await _refreshRequirements();
   }
 
+  Future<void> _pickAlertDateTime() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: targetTime ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(now.year + 2),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime:
+          targetTime == null
+              ? TimeOfDay.now()
+              : TimeOfDay.fromDateTime(targetTime!),
+    );
+    if (time == null || !mounted) return;
+    setState(() {
+      targetTime = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    });
+  }
+
   void setRadius(double value) {
     setState(() {
       radius = value;
@@ -197,6 +229,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
 
   @override
   Widget build(BuildContext context) {
+    final actualAlertAt = targetTime?.subtract(Duration(minutes: leadMinutes));
+    final invalidTime =
+        actualAlertAt != null && !actualAlertAt.isAfter(DateTime.now());
     final position = ref.watch(locationProvider).position;
     final alarm = ref.watch(alarmProvider);
     final distance = distanceTo(position, widget.place);
@@ -329,32 +364,55 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.schedule),
-            title: const Text('Time alarm (optional)'),
+            title: const Text('Date and time alarm (optional)'),
             subtitle: Text(
-              alertTime == null
+              targetTime == null
                   ? 'Distance only'
-                  : 'Ring at ${alertTime!.format(context)} or when you reach the distance',
+                  : 'Ring ${_formatDateTime(context, actualAlertAt!)}',
             ),
             trailing:
-                alertTime == null
+                targetTime == null
                     ? const Icon(Icons.chevron_right)
                     : IconButton(
                       tooltip: 'Remove time',
                       icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => alertTime = null),
+                      onPressed: () => setState(() => targetTime = null),
                     ),
-            onTap: () async {
-              final picked = await showTimePicker(
-                context: context,
-                initialTime: alertTime ?? TimeOfDay.now(),
-              );
-              if (picked != null && mounted) setState(() => alertTime = picked);
-            },
+            onTap: _pickAlertDateTime,
           ),
-          if (alertTime != null)
+          if (targetTime != null) ...[
+            const Text('Ring before the chosen time'),
+            Wrap(
+              spacing: 8,
+              children:
+                  [0, 5, 15, 30, 60]
+                      .map(
+                        (minutes) => ChoiceChip(
+                          label: Text(
+                            minutes == 0
+                                ? 'At that time'
+                                : '$minutes min before',
+                          ),
+                          selected: leadMinutes == minutes,
+                          onSelected:
+                              (_) => setState(() => leadMinutes = minutes),
+                        ),
+                      )
+                      .toList(),
+            ),
+            if (invalidTime)
+              Text(
+                'Choose a future alert time.',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+          ],
+          if (targetTime != null)
             const Text(
               'The time alert may be delayed by Android battery restrictions.',
             ),
+          const Text(
+            'Time and distance alerts ring separately. Whichever happens first rings first.',
+          ),
           const SizedBox(height: 10),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -529,24 +587,18 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
             onPressed:
                 alarm.busy ||
                         radiusError != null ||
+                        invalidTime ||
                         checkingRequirements ||
                         requirements?.ready != true
                     ? null
                     : () async {
                       try {
-                        final now = DateTime.now();
-                        var alertAt =
-                            alertTime == null
-                                ? null
-                                : DateTime(
-                                  now.year,
-                                  now.month,
-                                  now.day,
-                                  alertTime!.hour,
-                                  alertTime!.minute,
-                                );
-                        if (alertAt != null && !alertAt.isAfter(now)) {
-                          alertAt = alertAt.add(const Duration(days: 1));
+                        final alertAt = targetTime?.subtract(
+                          Duration(minutes: leadMinutes),
+                        );
+                        if (alertAt != null &&
+                            !alertAt.isAfter(DateTime.now())) {
+                          throw StateError('Choose a future alert time.');
                         }
                         await ref
                             .read(alarmProvider)
@@ -811,14 +863,16 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                 ListTile(
                   leading: const Icon(Icons.radio_button_checked),
                   title: const Text('Alert radius'),
-                  subtitle: Text(formatDistance(alarm.radius)),
+                  subtitle: Text(
+                    '${formatDistance(alarm.radius)} · ${alarmState.distanceFired ? 'Rang' : 'Waiting'}',
+                  ),
                 ),
                 if (alarm.alertAt != null)
                   ListTile(
                     leading: const Icon(Icons.schedule),
                     title: const Text('Time alarm'),
                     subtitle: Text(
-                      TimeOfDay.fromDateTime(alarm.alertAt!).format(context),
+                      '${_formatDateTime(context, alarm.alertAt!)} · ${alarmState.timeFired ? 'Rang' : 'Waiting'}',
                     ),
                   ),
                 ListTile(
@@ -848,7 +902,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                         context: context,
                         builder:
                             (context) => AlertDialog(
-                              title: const Text('Cancel destination alarm?'),
+                              title: const Text('End this trip?'),
                               content: Text(alarm.place.name),
                               actions: [
                                 TextButton(
@@ -858,7 +912,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                                 ),
                                 FilledButton(
                                   onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('Yes, cancel'),
+                                  child: const Text('End trip'),
                                 ),
                               ],
                             ),
@@ -881,7 +935,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                       }
                     },
             icon: const Icon(Icons.cancel_outlined),
-            label: const Text('Cancel alarm'),
+            label: const Text('End trip'),
           ),
         ],
       ),
@@ -934,10 +988,12 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              Text(
-                'The selected time or destination distance has been reached.',
-                textAlign: TextAlign.center,
-              ),
+              Text(switch (alarmState.triggerReason) {
+                'time' => 'The selected time has been reached.',
+                'both' =>
+                  'The selected time and distance have both been reached.',
+                _ => 'You have reached the selected distance.',
+              }, textAlign: TextAlign.center),
               const Spacer(),
               FilledButton.icon(
                 onPressed:
@@ -945,12 +1001,18 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                         ? null
                         : () async {
                           try {
-                            await ref.read(alarmProvider).stop();
-                            if (context.mounted) context.go('/');
+                            await ref.read(alarmProvider).dismissCurrent();
+                            if (context.mounted) {
+                              context.go(
+                                ref.read(alarmProvider).active == null
+                                    ? '/'
+                                    : '/active',
+                              );
+                            }
                           } catch (_) {}
                         },
                 icon: const Icon(Icons.stop),
-                label: const Text('Stop alarm'),
+                label: const Text('Stop this alert'),
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
@@ -999,6 +1061,49 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                     ),
                 icon: const Icon(Icons.snooze),
                 label: const Text('Snooze'),
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed:
+                    alarmState.busy
+                        ? null
+                        : () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder:
+                                (dialogContext) => AlertDialog(
+                                  title: const Text('End trip?'),
+                                  content: const Text(
+                                    'This cancels both the time and distance alerts.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed:
+                                          () => Navigator.pop(
+                                            dialogContext,
+                                            false,
+                                          ),
+                                      child: const Text('Keep trip'),
+                                    ),
+                                    FilledButton(
+                                      onPressed:
+                                          () => Navigator.pop(
+                                            dialogContext,
+                                            true,
+                                          ),
+                                      child: const Text('End trip'),
+                                    ),
+                                  ],
+                                ),
+                          );
+                          if (confirmed != true) return;
+                          try {
+                            await ref.read(alarmProvider).stop();
+                            if (context.mounted) context.go('/');
+                          } catch (_) {}
+                        },
+                icon: const Icon(Icons.cancel_outlined),
+                label: const Text('End trip'),
               ),
               const SizedBox(height: 20),
             ],

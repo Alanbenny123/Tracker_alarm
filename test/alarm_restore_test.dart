@@ -68,6 +68,23 @@ class FakeGeofence extends GeofenceService {
   Future<void> trigger() async {
     triggerCalls++;
     nativeStatus = 'triggered';
+    nativeState?['distanceFired'] = true;
+    nativeState?['triggerReason'] = 'distance';
+  }
+
+  void fireTime() {
+    nativeStatus = 'triggered';
+    nativeState?['timeFired'] = true;
+    nativeState?['triggerReason'] = 'time';
+  }
+
+  @override
+  Future<void> dismissCurrent() async {
+    nativeStatus =
+        nativeState?['timeFired'] == true &&
+                nativeState?['distanceFired'] == true
+            ? 'completed'
+            : 'active';
   }
 }
 
@@ -95,6 +112,43 @@ Position positionAt(double latitude, double longitude) => Position(
 );
 
 void main() {
+  test('stopping the first alert keeps the other alert active', () async {
+    final storage = MemoryStorage();
+    final geofence = FakeGeofence('active', {
+      'id': 'two-alerts',
+      'name': 'Station',
+      'address': 'Town',
+      'latitude': 9.9,
+      'longitude': 76.7,
+      'radius': 500.0,
+      'vibration': true,
+      'sound': 'Bell',
+      'startedAt': 1791448200000,
+      'alertAt': 1791451800000,
+    });
+    final controller = AlarmController(
+      storage,
+      geofence,
+      LocationService(),
+      HistoryController(storage),
+    );
+    await controller.restore();
+
+    geofence.fireTime();
+    await controller.syncStatus();
+    expect(controller.timeFired, isTrue);
+    await controller.dismissCurrent();
+    expect(controller.status, 'active');
+    expect(controller.active, isNotNull);
+
+    await controller.checkVisiblePosition(positionAt(9.9, 76.7));
+    expect(controller.distanceFired, isTrue);
+    expect(controller.status, 'triggered');
+    await controller.dismissCurrent();
+    expect(controller.active, isNull);
+    expect(storage.records.single.status, 'completed');
+  });
+
   test(
     'alarm cannot start before all required Android settings are enabled',
     () async {

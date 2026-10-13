@@ -66,6 +66,8 @@ class GeofenceService {
   Future<void> resumeTriggered() =>
       _channel.invokeMethod<void>('resumeTriggered');
   Future<void> stop() => _channel.invokeMethod<void>('stop');
+  Future<void> dismissCurrent() =>
+      _channel.invokeMethod<void>('dismissCurrent');
   Future<void> trigger() => _channel.invokeMethod<void>('trigger');
   Future<void> snooze(int minutes) =>
       _channel.invokeMethod<void>('snooze', {'minutes': minutes});

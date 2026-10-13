@@ -11,7 +11,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.location.Location
-import android.location.LocationManager
 import android.os.Build
 import android.os.SystemClock
 import com.google.android.gms.location.Geofence
@@ -46,6 +45,9 @@ object AlarmRuntime {
         )
         val alertAt = stored.getLong("alertAt", 0L)
         if (alertAt > 0L) state["alertAt"] = alertAt
+        state["timeFired"] = stored.getBoolean("timeFired", false)
+        state["distanceFired"] = stored.getBoolean("distanceFired", false)
+        state["triggerReason"] = stored.getString("triggerReason", "distance") ?: "distance"
         return state
     }
 
@@ -65,7 +67,9 @@ object AlarmRuntime {
     )
 
     private fun scheduleTime(context: Context) {
-        val whenMillis = prefs(context).getLong("alertAt", 0L)
+        val stored = prefs(context)
+        if (stored.getBoolean("timeFired", false)) return
+        val whenMillis = stored.getLong("alertAt", 0L)
         if (whenMillis <= System.currentTimeMillis()) return
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, whenMillis, timeIntent(context))
@@ -105,6 +109,8 @@ object AlarmRuntime {
             .putString("sound", args["sound"] as? String ?: "Default alarm")
             .putLong("startedAt", (args["startedAt"] as? Number)?.toLong() ?: System.currentTimeMillis())
             .putLong("alertAt", (args["alertAt"] as? Number)?.toLong() ?: 0L)
+            .putBoolean("timeFired", false).putBoolean("distanceFired", false)
+            .putString("triggerReason", "distance")
             .putString("status", "active").commit()
         if (!saved) {
             result.error("storage", "Could not save the destination alarm", null)
@@ -217,9 +223,21 @@ object AlarmRuntime {
 
     fun trigger(context: Context, reason: String = "distance") {
         val stored = prefs(context)
-        if (stored.getString("status", "inactive") != "active") return
-        cancelTime(context)
-        stored.edit().putString("status", "triggered").putString("triggerReason", reason).commit()
+        val status = stored.getString("status", "inactive")
+        if (status != "active" && status != "triggered" && status != "snoozed") return
+        if (reason == "time") {
+            if (stored.getLong("alertAt", 0L) <= 0L || stored.getBoolean("timeFired", false)) return
+            cancelTime(context)
+        } else if (reason == "distance") {
+            if (stored.getBoolean("distanceFired", false)) return
+        } else return
+        val timeFired = stored.getBoolean("timeFired", false) || reason == "time"
+        val distanceFired = stored.getBoolean("distanceFired", false) || reason == "distance"
+        val combined = status == "triggered" || status == "snoozed"
+        val label = if (combined && timeFired && distanceFired) "both" else reason
+        if (!stored.edit().putBoolean("timeFired", timeFired).putBoolean("distanceFired", distanceFired)
+                .putString("status", "triggered").putString("triggerReason", label).commit()) return
+        if (status == "snoozed") cancelSnooze(context)
         if (DestinationTrackingService.ringIfRunning()) return
         val service = Intent(context, AlarmPlaybackService::class.java)
         try {
@@ -231,6 +249,7 @@ object AlarmRuntime {
     }
 
     fun snooze(context: Context, minutes: Int) {
+        if (prefs(context).getString("status", "inactive") != "triggered") return
         if (minutes !in listOf(1, 2, 5)) return
         context.stopService(Intent(context, AlarmPlaybackService::class.java))
         prefs(context).edit().putString("status", "snoozed").commit()
@@ -248,27 +267,45 @@ object AlarmRuntime {
 
     fun snoozeExpired(context: Context, done: () -> Unit) {
         if (prefs(context).getString("status", "inactive") != "snoozed") { done(); return }
-        val location = DestinationTrackingService.latestLocation()
-            ?.takeIf { System.currentTimeMillis() - it.time <= 60_000L } ?: try {
-            (context.getSystemService(Context.LOCATION_SERVICE) as LocationManager)
-                .getLastKnownLocation(LocationManager.GPS_PROVIDER)
-        } catch (_: Exception) { null }
-        prefs(context).edit().putString("status", "active").commit()
-        if (location != null && System.currentTimeMillis() - location.time <= 60_000L && inside(context, location)) {
-            trigger(context)
-        } else {
-            // The running GPS monitor will check again on its next fix.
-            showTracking(context, "Monitoring ${prefs(context).getString("name", "destination")}")
+        prefs(context).edit().putString("status", "triggered").commit()
+        if (!DestinationTrackingService.ringIfRunning()) {
+            val service = Intent(context, AlarmPlaybackService::class.java)
+            try {
+                if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(service) else context.startService(service)
+            } catch (_: Exception) { notifications(context).notify(ALARM_ID, alarmNotification(context)) }
         }
         done()
     }
 
-    private fun inside(context: Context, location: Location): Boolean {
+    fun dismissCurrent(context: Context, result: MethodChannel.Result? = null, done: (() -> Unit)? = null) {
         val stored = prefs(context)
-        val distance = FloatArray(1)
-        Location.distanceBetween(location.latitude, location.longitude,
-            coordinate(stored, "latitude", "lat"), coordinate(stored, "longitude", "lng"), distance)
-        return distance[0] <= stored.getFloat("radius", 500f) + location.accuracy
+        if (stored.getString("status", "inactive") != "triggered") {
+            result?.error("state", "No alert is ringing", null)
+            done?.invoke()
+            return
+        }
+        val allFired = stored.getBoolean("distanceFired", false) &&
+            (stored.getLong("alertAt", 0L) <= 0L || stored.getBoolean("timeFired", false))
+        if (allFired) {
+            finish(context, "completed", result, done)
+            return
+        }
+        if (!stored.edit().putString("status", "active").commit()) {
+            result?.error("storage", "Could not save alert state", null)
+            done?.invoke()
+            return
+        }
+        context.stopService(Intent(context, AlarmPlaybackService::class.java))
+        notifications(context).cancel(ALARM_ID)
+        try {
+            if (!DestinationTrackingService.snoozeIfRunning()) startTracking(context)
+            result?.success(null)
+        } catch (e: Exception) {
+            stored.edit().putString("status", "triggered").commit()
+            notifications(context).notify(ALARM_ID, alarmNotification(context))
+            result?.error("tracking", "Could not resume the remaining alert: ${e.message}", null)
+        }
+        done?.invoke()
     }
 
     fun distanceToDestination(context: Context, location: Location): Float {
@@ -322,18 +359,21 @@ object AlarmRuntime {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val fullScreen = PendingIntent.getActivity(context, 22, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getBroadcast(context, 23, Intent(context, AlarmActionReceiver::class.java).setAction("tracker_alarm.STOP"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val end = PendingIntent.getBroadcast(context, 25, Intent(context, AlarmActionReceiver::class.java).setAction("tracker_alarm.END_TRIP"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val reason = prefs(context).getString("triggerReason", "distance")
         val snooze = PendingIntent.getBroadcast(context, 24, Intent(context, AlarmActionReceiver::class.java).setAction("tracker_alarm.SNOOZE"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return builder(context, CHANNEL_ALARM)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle(if (prefs(context).getString("triggerReason", "distance") == "time") "Time alarm" else "Destination nearby")
-            .setContentText(if (prefs(context).getString("triggerReason", "distance") == "time") "Time reached for $name" else "You are near $name")
+            .setContentTitle(when (reason) { "time" -> "Time alarm"; "both" -> "Time and distance alarm"; else -> "Destination nearby" })
+            .setContentText(when (reason) { "time" -> "Time reached for $name"; "both" -> "Time reached and near $name"; else -> "You are near $name" })
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setPriority(Notification.PRIORITY_MAX)
             .setContentIntent(fullScreen)
             .setFullScreenIntent(fullScreen, true)
             .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "Snooze 1 min", snooze).build())
-            .addAction(Notification.Action.Builder(android.R.drawable.ic_delete, "Stop", stop).build())
+            .addAction(Notification.Action.Builder(android.R.drawable.ic_delete, "Stop alert", stop).build())
+            .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, "End trip", end).build())
             .setOngoing(true).build()
     }
 

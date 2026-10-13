@@ -65,6 +65,7 @@ class MainActivity : FlutterActivity() {
                 }
                 "cancel" -> AlarmRuntime.finish(this, "cancelled", result)
                 "stop" -> AlarmRuntime.finish(this, "completed", result)
+                "dismissCurrent" -> AlarmRuntime.dismissCurrent(this, result)
                 "ensure" -> AlarmRuntime.ensure(this, result)
                 "resumeTriggered" -> {
                     AlarmRuntime.resumeTriggered(this)

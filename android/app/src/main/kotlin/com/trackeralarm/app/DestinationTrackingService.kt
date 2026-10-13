@@ -67,17 +67,17 @@ class DestinationTrackingService : Service() {
     }
 
     private fun ring(): Boolean {
-        if (ringing) return true
+        if (ringing) {
+            AlarmRuntime.notifications(this).notify(AlarmRuntime.ALARM_ID, AlarmRuntime.alarmNotification(this))
+            return true
+        }
         if (AlarmRuntime.prefs(this).getString("status", "inactive") != "triggered") return false
         try {
             val notification = AlarmRuntime.alarmNotification(this)
             if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(AlarmRuntime.ALARM_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+                startForeground(AlarmRuntime.ALARM_ID, notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
             } else startForeground(AlarmRuntime.ALARM_ID, notification)
-            if (trackingInterval != 0L) {
-                locationManager.removeUpdates(listener)
-                trackingInterval = 0L
-            }
             AlarmRuntime.notifications(this).cancel(AlarmRuntime.TRACKING_ID)
             ringing = true
             sound.start()
@@ -139,18 +139,16 @@ class DestinationTrackingService : Service() {
                 return
             }
             if (!ringing) ring()
-            return
         }
-        if (status != "active") return
+        if (status != "active" && status != "triggered") return
         val alertAt = AlarmRuntime.prefs(this).getLong("alertAt", 0L)
-        if (alertAt > 0L && System.currentTimeMillis() >= alertAt) {
+        if (alertAt > 0L && !AlarmRuntime.prefs(this).getBoolean("timeFired", false) && System.currentTimeMillis() >= alertAt) {
             AlarmRuntime.trigger(this, "time")
-            return
         }
         if (System.currentTimeMillis() - location.time > 30_000L) return
         val distance = AlarmRuntime.distanceToDestination(this, location)
         val radius = AlarmRuntime.prefs(this).getFloat("radius", 500f)
-        if (distance <= radius) {
+        if (distance <= radius && !AlarmRuntime.prefs(this).getBoolean("distanceFired", false)) {
             AlarmRuntime.trigger(this)
             return
         }

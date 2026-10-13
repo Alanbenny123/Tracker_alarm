@@ -218,6 +218,24 @@ class AlarmController extends ChangeNotifier {
   bool restoring = true;
   bool _triggering = false;
   bool _syncing = false;
+  bool timeFired = false;
+  bool distanceFired = false;
+  String triggerReason = 'distance';
+
+  bool _readProgress(Map<String, dynamic>? native) {
+    if (native == null) return false;
+    final nextTime = native['timeFired'] == true;
+    final nextDistance = native['distanceFired'] == true;
+    final nextReason = native['triggerReason'] as String? ?? 'distance';
+    final changed =
+        nextTime != timeFired ||
+        nextDistance != distanceFired ||
+        nextReason != triggerReason;
+    timeFired = nextTime;
+    distanceFired = nextDistance;
+    triggerReason = nextReason;
+    return changed;
+  }
 
   Future<void> restore() async {
     try {
@@ -273,6 +291,7 @@ class AlarmController extends ChangeNotifier {
       } else if (active != null && status == 'triggered') {
         await _geofence.resumeTriggered();
       }
+      if (active != null) _readProgress(await _geofence.state());
     } catch (e) {
       error = 'Could not restore the active alarm: $e';
     }
@@ -287,7 +306,10 @@ class AlarmController extends ChangeNotifier {
     try {
       final nextStatus = await _geofence.status();
       if (active != currentAlarm) return;
-      final changed = nextStatus != status || error != null;
+      final native = await _geofence.state();
+      if (active != currentAlarm) return;
+      final progressChanged = _readProgress(native);
+      final changed = nextStatus != status || error != null || progressChanged;
       status = nextStatus;
       if (status == 'completed' || status == 'cancelled') {
         await _archiveNativeFinish(status);
@@ -353,10 +375,14 @@ class AlarmController extends ChangeNotifier {
       await _storage.setString('active_alarm', jsonEncode(alarm.toJson()));
       active = alarm;
       status = 'active';
+      timeFired = false;
+      distanceFired = false;
+      triggerReason = 'distance';
       if (_location.distance(position, place.latitude, place.longitude) <=
           radius) {
         await _geofence.trigger();
-        status = 'triggered';
+        status = await _geofence.status();
+        _readProgress(await _geofence.state());
       }
     } catch (e) {
       error = e.toString();
@@ -369,6 +395,28 @@ class AlarmController extends ChangeNotifier {
 
   Future<void> cancel() => _finish('cancelled');
   Future<void> stop() => _finish('completed');
+
+  Future<void> dismissCurrent() async {
+    if (active == null || status != 'triggered') return;
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      await _geofence.dismissCurrent();
+      status = await _geofence.status();
+      if (status == 'completed') {
+        await _archiveNativeFinish('completed');
+      } else {
+        _readProgress(await _geofence.state());
+      }
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> _finish(String result) async {
     final alarm = active;
@@ -411,7 +459,12 @@ class AlarmController extends ChangeNotifier {
 
   Future<void> checkVisiblePosition(Position position) async {
     final alarm = active;
-    if (alarm == null || status != 'active' || _triggering) return;
+    if (alarm == null ||
+        distanceFired ||
+        (status != 'active' && status != 'triggered') ||
+        _triggering) {
+      return;
+    }
     if (_location.distance(
           position,
           alarm.place.latitude,
@@ -424,6 +477,7 @@ class AlarmController extends ChangeNotifier {
     try {
       await _geofence.trigger();
       status = await _geofence.status();
+      _readProgress(await _geofence.state());
       notifyListeners();
     } catch (e) {
       error = e.toString();
