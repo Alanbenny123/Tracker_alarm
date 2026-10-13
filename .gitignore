@@ -1,6 +1,7 @@
 # Miscellaneous
 *.class
 *.lock
+!pubspec.lock
 *.log
 *.pyc
 *.swp
@@ -48,10 +49,13 @@ unlinked_spec.ds
 
 # Android related
 **/android/**/gradle-wrapper.jar
+!android/gradle/wrapper/gradle-wrapper.jar
 .gradle/
 **/android/captures/
 **/android/gradlew
 **/android/gradlew.bat
+!android/gradlew
+!android/gradlew.bat
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
 **/android/key.properties
@@ -117,3 +121,30 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
+
+# Local editor and tool state
+.DS_Store
+.idea/
+.vscode/
+*.iml
+/.aws/
+/.codex/
+/.agents/
+
+# Local secrets and release signing material
+.env
+.env.*
+!.env.example
+*.keystore
+*.pem
+*.p12
+*.p8
+**/keystore.properties
+
+# Distributable build files
+*.apk
+*.aab
+app.*.map.json
+
+# This is a separate website project, not part of the GPS alarm app
+/mestrie-chatbot/

@@ -1,0 +1,25 @@
+# Destination Alarm
+
+Android Flutter app for a single GPS destination alarm. The user can search with Android's device geocoder or tap an OpenStreetMap map, choose a 100–2000 m alert radius with presets, a slider, or manual entry in metres or kilometres, and start monitoring. The manual unit picker keeps the typed number unchanged; the app validates it against the selected unit. An optional clock time also rings the alarm, whichever trigger occurs first. Saved places, settings, and trip history remain on the device.
+
+Google Maps can share a place to Destination Alarm using Android's Share menu. The app opens shared coordinates in alarm setup for review. If a short link resolves to a place name without coordinates, the app searches for that place and asks the user to choose a result. When the phone cannot open a short link, the app uses a shared place name if Android supplied one, or opens destination search for manual selection. Direct coordinate links work offline; shortened Google Maps links and place search need internet. Sharing a place does not transfer Google Maps' downloaded offline map.
+
+## Build
+
+1. Install a current stable Flutter SDK and Android SDK (API 36), with Java 17.
+2. Run `flutter pub get`.
+3. Run `flutter run` on an Android device with Google Play services.
+
+No API key is required. Map tiles come from OpenStreetMap and place search uses Android's device geocoder. Both may require internet. After the destination is set, the alarm uses saved coordinates, Android's GPS provider, and local sound and vibration; it does not need internet. The active screen leaves the online map hidden by default. An offline basemap is not included. A search request is made only when the user presses Search, and repeated queries are cached for the session. The device's geocoding provider may process search text off-device; the app itself does not store search queries or send GPS history to a server.
+
+## How background alerts work
+
+Before an alarm can start, the setup screen requires precise location, Allow all the time background location, notifications, and unrestricted battery use. It opens the relevant Android settings and rechecks them when the user returns; the alarm controller rechecks before registration. Android's power allowlist is verified directly. On phones whose No restrictions setting does not appear on that allowlist, the user can confirm the setting after opening battery settings. Vendor Autostart controls cannot be verified through a standard Android API. A native foreground service monitors GPS while the alarm is active, checking more often near the destination. An Android geofence remains a backup. When the distance or optional time is reached, the service plays looping sound and vibration and shows an alarm notification with stop and snooze actions. Snooze uses `AlarmManager`; on expiry the app checks a recent GPS position and otherwise waits for the next GPS fix. The active configuration is saved in both Android preferences and Flutter storage, and the Flutter UI restores it on launch.
+
+Android can batch background geofence events for several minutes, and device power settings or poor GPS reception can delay an alert. The minimum radius is 100 m in line with Android's geofencing guidance. Clock alerts use an inexact Android alarm and may also be delayed by battery restrictions. The displayed travel time estimate uses current GPS speed and is unavailable when speed is too low. Force-stopping the app stops background monitoring. A destination alarm should be used with enough radius for the travel speed and should not be the only way to avoid a stop.
+
+## Verification
+
+Run `flutter analyze` and `flutter test`. On a physical Android device, verify foreground, minimized, and locked-screen entry at 100 m, 500 m, and 2 km; notification permission denied; precise/background location denied; GPS disabled; internet disconnected after setup; process restart; notification Stop/Snooze; and manual cancellation. Check walking and vehicle travel because GPS timing depends on device and conditions.
+
+Release builds use a private keystore referenced by `android/key.properties`. Keep that file and the keystore outside Git; debug builds do not need them. See Flutter's Android signing guide before publishing.

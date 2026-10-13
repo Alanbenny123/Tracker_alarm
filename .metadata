@@ -1,0 +1,14 @@
+# This file tracks properties of this Flutter project.
+# It is used by the Flutter tool to assess capabilities and perform upgrades.
+version:
+  revision: "5fc346839b5d0eef006ed8404392afb4dfae428d"
+  channel: "stable"
+project_type: app
+migration:
+  platforms:
+    - platform: root
+      create_revision: "5fc346839b5d0eef006ed8404392afb4dfae428d"
+      base_revision: "5fc346839b5d0eef006ed8404392afb4dfae428d"
+    - platform: android
+      create_revision: "5fc346839b5d0eef006ed8404392afb4dfae428d"
+      base_revision: "5fc346839b5d0eef006ed8404392afb4dfae428d"

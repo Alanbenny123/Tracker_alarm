@@ -1,0 +1,6 @@
+# Copy this file to key.properties and replace every value below.
+# Never commit key.properties or the .jks keystore.
+storePassword=REPLACE_WITH_STORE_PASSWORD
+keyPassword=REPLACE_WITH_KEY_PASSWORD
+keyAlias=upload
+storeFile=/absolute/path/to/tracker-alarm-upload.jks
