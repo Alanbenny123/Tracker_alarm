@@ -1,0 +1,166 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' as math;
+
+import '../models/place.dart';
+import '../models/travel_mode.dart';
+
+class TransitStopsService {
+  TransitStopsService({HttpClient? client}) : _client = client ?? HttpClient();
+
+  final HttpClient _client;
+  final Map<String, (DateTime, List<Place>)> _cache = {};
+  static const _endpoint = 'https://overpass-api.de/api/interpreter';
+
+  Future<List<Place>> nearby(
+    TravelMode mode,
+    double latitude,
+    double longitude,
+  ) async {
+    if (!mode.usesStops) return [];
+    final cacheKey =
+        '${mode.name}:${(latitude * 1000).round()}:${(longitude * 1000).round()}';
+    final cached = _cache[cacheKey];
+    if (cached != null &&
+        DateTime.now().difference(cached.$1) < const Duration(minutes: 10)) {
+      return cached.$2;
+    }
+    final filter = switch (mode) {
+      TravelMode.bus =>
+        'nwr["highway"="bus_stop"](around:5000,$latitude,$longitude);'
+            'nwr["public_transport"="platform"]["bus"="yes"](around:5000,$latitude,$longitude);',
+      TravelMode.metro =>
+        'nwr["railway"="station"]["station"="subway"](around:5000,$latitude,$longitude);'
+            'nwr["railway"="station"]["subway"="yes"](around:5000,$latitude,$longitude);'
+            'nwr["public_transport"="station"]["subway"="yes"](around:5000,$latitude,$longitude);',
+      _ => '',
+    };
+    final query = '[out:json][timeout:15];($filter);out center 200;';
+    try {
+      final request = await _client
+          .postUrl(Uri.parse(_endpoint))
+          .timeout(const Duration(seconds: 12));
+      request.headers.contentType = ContentType(
+        'application',
+        'x-www-form-urlencoded',
+        charset: 'utf-8',
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        'DestinationAlarm/1.0 (Android; OSM transit stop lookup)',
+      );
+      request.write('data=${Uri.encodeQueryComponent(query)}');
+      final response = await request.close().timeout(
+        const Duration(seconds: 22),
+      );
+      if (response.statusCode != HttpStatus.ok) {
+        throw const TransitStopsException(
+          'Stop search is busy. Try again shortly.',
+        );
+      }
+      final bytes = <int>[];
+      await for (final chunk in response.timeout(const Duration(seconds: 22))) {
+        bytes.addAll(chunk);
+        if (bytes.length > 2 * 1024 * 1024) {
+          throw const TransitStopsException(
+            'Too many stops returned. Search a smaller area.',
+          );
+        }
+      }
+      final places = parseTransitStops(jsonDecode(utf8.decode(bytes)), mode);
+      places.sort(
+        (a, b) => _roughDistanceMetresTo(
+          latitude,
+          longitude,
+          a,
+        ).compareTo(_roughDistanceMetresTo(latitude, longitude, b)),
+      );
+      _cache[cacheKey] = (DateTime.now(), places);
+      return places;
+    } on TransitStopsException {
+      rethrow;
+    } on SocketException {
+      throw const TransitStopsException(
+        'Connect to the internet to find stops.',
+      );
+    } on HandshakeException {
+      throw const TransitStopsException('Could not connect to stop search.');
+    } on HttpException {
+      throw const TransitStopsException(
+        'Stop search is unavailable. Try again.',
+      );
+    } on FormatException {
+      throw const TransitStopsException(
+        'Could not read stop results. Try again.',
+      );
+    } catch (_) {
+      throw const TransitStopsException(
+        'Could not load stops. Check your connection and try again.',
+      );
+    }
+  }
+
+  void dispose() {
+    _cache.clear();
+    _client.close(force: true);
+  }
+}
+
+class TransitStopsException implements Exception {
+  const TransitStopsException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
+List<Place> parseTransitStops(Object? body, TravelMode mode) {
+  if (body is! Map || body['elements'] is! List) return [];
+  final places = <Place>[];
+  for (final item in body['elements'] as List) {
+    if (item is! Map || item['tags'] is! Map) continue;
+    final tags = item['tags'] as Map;
+    final name =
+        tags['name'] is String ? (tags['name'] as String).trim() : null;
+    if (name == null || name.isEmpty) continue;
+    final center = item['center'];
+    final lat = item['lat'] ?? (center is Map ? center['lat'] : null);
+    final lon = item['lon'] ?? (center is Map ? center['lon'] : null);
+    if (lat is! num || lon is! num) continue;
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) continue;
+    final place = Place(
+      id: 'osm:${item['type']}:${item['id']}',
+      name: name,
+      address: mode == TravelMode.bus ? 'Bus stop' : 'Metro station',
+      latitude: lat.toDouble(),
+      longitude: lon.toDouble(),
+    );
+    // Platforms and stations can be mapped several times at the same place.
+    final duplicate = places.any(
+      (other) =>
+          other.name.toLowerCase() == name.toLowerCase() &&
+          _roughDistanceMetres(other, place) <
+              (mode == TravelMode.metro ? 350 : 80),
+    );
+    if (!duplicate) places.add(place);
+  }
+  return places;
+}
+
+double _roughDistanceMetres(Place a, Place b) {
+  final north = (a.latitude - b.latitude) * 111000;
+  final east =
+      (a.longitude - b.longitude) *
+      111000 *
+      _cosLatitude((a.latitude + b.latitude) / 2);
+  return math.sqrt(north * north + east * east);
+}
+
+double _roughDistanceMetresTo(double lat, double lon, Place place) =>
+    _roughDistanceMetres(
+      Place(name: '', address: '', latitude: lat, longitude: lon),
+      place,
+    );
+
+// This estimate is only used for de-duplicating very close OSM objects.
+double _cosLatitude(double degrees) => math.cos(degrees * 0.017453292519943295);

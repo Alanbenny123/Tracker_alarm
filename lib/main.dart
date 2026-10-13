@@ -9,6 +9,7 @@ import 'features/alarm/alarm_screens.dart';
 import 'features/home/home_screen.dart';
 import 'features/map/destination_picker_screen.dart';
 import 'models/place.dart';
+import 'models/travel_mode.dart';
 import 'providers/app_providers.dart';
 import 'services/shared_location_service.dart';
 
@@ -35,8 +36,12 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       GoRoute(
         path: '/pick',
         builder:
-            (context, state) =>
-                DestinationPickerScreen(initialQuery: state.extra as String?),
+            (context, state) => DestinationPickerScreen(
+              initialQuery:
+                  state.extra is String ? state.extra as String : null,
+              initialMode:
+                  state.extra is TravelMode ? state.extra as TravelMode : null,
+            ),
       ),
       GoRoute(
         path: '/setup',

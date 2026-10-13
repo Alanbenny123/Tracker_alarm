@@ -10,15 +10,21 @@ class MapView extends StatefulWidget {
     super.key,
     this.position,
     this.destination,
+    this.areaCenter,
+    this.places = const [],
     this.radius = 500,
     this.onTap,
+    this.onPlaceTap,
     this.onDestinationDrag,
     this.interactive = true,
   });
   final Position? position;
   final Place? destination;
+  final LatLng? areaCenter;
+  final List<Place> places;
   final double radius;
   final void Function(LatLng)? onTap;
+  final void Function(Place)? onPlaceTap;
   final void Function(LatLng)? onDestinationDrag;
   final bool interactive;
 
@@ -54,6 +60,14 @@ class _MapViewState extends State<MapView> {
         }
       });
     } else if (destination == null &&
+        widget.areaCenter != null &&
+        (oldWidget.areaCenter != widget.areaCenter ||
+            oldWidget.destination != null)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) controller.move(widget.areaCenter!, 13);
+      });
+    } else if (destination == null &&
+        widget.areaCenter == null &&
         oldWidget.position == null &&
         widget.position != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -71,9 +85,13 @@ class _MapViewState extends State<MapView> {
   Widget build(BuildContext context) {
     final center =
         widget.destination == null
-            ? (widget.position == null
-                ? const LatLng(20, 0)
-                : LatLng(widget.position!.latitude, widget.position!.longitude))
+            ? (widget.areaCenter ??
+                (widget.position == null
+                    ? const LatLng(20, 0)
+                    : LatLng(
+                      widget.position!.latitude,
+                      widget.position!.longitude,
+                    )))
             : LatLng(
               widget.destination!.latitude,
               widget.destination!.longitude,
@@ -86,7 +104,11 @@ class _MapViewState extends State<MapView> {
             initialCenter: center,
             initialZoom:
                 widget.destination == null
-                    ? (widget.position == null ? 2 : 12)
+                    ? (widget.areaCenter != null
+                        ? 13
+                        : widget.position == null
+                        ? 2
+                        : 12)
                     : 15,
             interactionOptions: InteractionOptions(
               flags:
@@ -129,6 +151,31 @@ class _MapViewState extends State<MapView> {
               ),
             MarkerLayer(
               markers: [
+                for (final place in widget.places)
+                  Marker(
+                    point: LatLng(place.latitude, place.longitude),
+                    width: 42,
+                    height: 42,
+                    child: Semantics(
+                      label: place.name,
+                      button: true,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap:
+                            widget.onPlaceTap == null
+                                ? null
+                                : () => widget.onPlaceTap!(place),
+                        child: Icon(
+                          Icons.place,
+                          color:
+                              widget.destination?.id == place.id
+                                  ? Theme.of(context).colorScheme.primary
+                                  : const Color(0xFFAA4A35),
+                          size: 33,
+                        ),
+                      ),
+                    ),
+                  ),
                 if (widget.position != null)
                   Marker(
                     point: LatLng(

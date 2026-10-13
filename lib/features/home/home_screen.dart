@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../models/place.dart';
+import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../map/map_view.dart';
 
@@ -109,6 +110,29 @@ class _HomeTab extends ConsumerWidget {
           style: Theme.of(
             context,
           ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 18),
+        Text(
+          'Choose transport',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final mode in TravelMode.values)
+              ActionChip(
+                avatar: Icon(switch (mode) {
+                  TravelMode.bus => Icons.directions_bus,
+                  TravelMode.metro => Icons.subway,
+                  TravelMode.car => Icons.directions_car,
+                  TravelMode.bike => Icons.two_wheeler,
+                }),
+                label: Text(mode.label),
+                onPressed: () => context.push('/pick', extra: mode),
+              ),
+          ],
         ),
         const SizedBox(height: 18),
         TextField(
@@ -459,7 +483,7 @@ class _SettingsTab extends ConsumerWidget {
                         title: const Text('Privacy policy'),
                         content: const SingleChildScrollView(
                           child: Text(
-                            'Your active destination, saved places, settings, and trip history are stored on this device. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Place queries may be processed by your device geocoding provider. Map tile requests go to OpenStreetMap and may reveal the viewed area and your IP address.',
+                            'Your active destination, saved places, settings, and trip history are stored on this device. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Place queries may be processed by your device geocoding provider. Bus and metro stop searches send the searched area’s coordinates to the public Overpass API. Map tile requests go to OpenStreetMap and may reveal the viewed area and your IP address.',
                           ),
                         ),
                         actions: [
