@@ -30,6 +30,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _handlingShare = false;
   bool _shareQueued = false;
+  bool _resolvingSharedLocation = false;
   late final GoRouter router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
@@ -78,7 +79,13 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
     try {
       final text = await _shareService.takePendingShare();
       if (text == null || text.isEmpty) return;
+      final loadingTimer = Stopwatch()..start();
+      if (mounted) setState(() => _resolvingSharedLocation = true);
       final place = await _shareService.parse(text);
+      const minimumVisibleTime = Duration(milliseconds: 400);
+      if (loadingTimer.elapsed < minimumVisibleTime) {
+        await Future<void>.delayed(minimumVisibleTime - loadingTimer.elapsed);
+      }
       if (!mounted) return;
       if (ref.read(alarmProvider).active != null) {
         _messengerKey.currentState?.showSnackBar(
@@ -115,6 +122,9 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       // Sharing is available only on Android.
     } finally {
       _handlingShare = false;
+      if (mounted && _resolvingSharedLocation) {
+        setState(() => _resolvingSharedLocation = false);
+      }
       if (_shareQueued) {
         _shareQueued = false;
         unawaited(_takeSharedLocation());
@@ -182,6 +192,44 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
         ThemeModeSetting.dark => ThemeMode.dark,
         _ => ThemeMode.system,
       },
+      builder:
+          (context, child) => Stack(
+            children: [
+              child ?? const SizedBox.shrink(),
+              if (_resolvingSharedLocation) ...[
+                const ModalBarrier(dismissible: false, color: Colors.black54),
+                Center(
+                  child: Card(
+                    margin: const EdgeInsets.all(24),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Semantics(
+                        liveRegion: true,
+                        child: const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CircularProgressIndicator(
+                              semanticsLabel: 'Opening shared location',
+                            ),
+                            SizedBox(height: 20),
+                            Text(
+                              'Opening Google Maps location…',
+                              textAlign: TextAlign.center,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Resolving the shared link. This may take a few seconds.',
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
       routerConfig: router,
     );
   }

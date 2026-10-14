@@ -1,12 +1,19 @@
-enum TravelMode { bus, metro, car, bike }
+enum TravelMode { bus, metro, railway, other }
 
 extension TravelModeLabel on TravelMode {
   String get label => switch (this) {
     TravelMode.bus => 'Bus',
     TravelMode.metro => 'Metro',
-    TravelMode.car => 'Car',
-    TravelMode.bike => 'Bike',
+    TravelMode.railway => 'Railway',
+    TravelMode.other => 'Other',
   };
 
-  bool get usesStops => this == TravelMode.bus || this == TravelMode.metro;
+  bool get usesStops => this != TravelMode.other;
+
+  String get placeName => switch (this) {
+    TravelMode.bus => 'bus stops',
+    TravelMode.metro => 'metro stations',
+    TravelMode.railway => 'railway stations',
+    TravelMode.other => 'places',
+  };
 }

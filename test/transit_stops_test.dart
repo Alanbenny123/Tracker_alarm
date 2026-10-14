@@ -60,4 +60,32 @@ void main() {
     expect(stations.single.address, 'Metro station');
     expect(stations.single.latitude, 10.0);
   });
+
+  test('railway stations include halts and exclude metro stations', () {
+    final stations = parseTransitStops({
+      'elements': [
+        {
+          'type': 'node',
+          'id': 10,
+          'lat': 10.1,
+          'lon': 76.2,
+          'tags': {'name': 'Railway Halt', 'railway': 'halt'},
+        },
+        {
+          'type': 'node',
+          'id': 11,
+          'lat': 10.2,
+          'lon': 76.3,
+          'tags': {
+            'name': 'Metro Station',
+            'railway': 'station',
+            'station': 'subway',
+          },
+        },
+      ],
+    }, TravelMode.railway);
+    expect(stations.single.name, 'Railway Halt');
+    expect(stations.single.address, 'Railway station');
+    expect(TravelMode.other.usesStops, isFalse);
+  });
 }

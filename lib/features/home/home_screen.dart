@@ -126,8 +126,8 @@ class _HomeTab extends ConsumerWidget {
                 avatar: Icon(switch (mode) {
                   TravelMode.bus => Icons.directions_bus,
                   TravelMode.metro => Icons.subway,
-                  TravelMode.car => Icons.directions_car,
-                  TravelMode.bike => Icons.two_wheeler,
+                  TravelMode.railway => Icons.train,
+                  TravelMode.other => Icons.place_outlined,
                 }),
                 label: Text(mode.label),
                 onPressed: () => context.push('/pick', extra: mode),
@@ -483,7 +483,7 @@ class _SettingsTab extends ConsumerWidget {
                         title: const Text('Privacy policy'),
                         content: const SingleChildScrollView(
                           child: Text(
-                            'Your active destination, saved places, settings, and trip history are stored on this device. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Place queries may be processed by your device geocoding provider. Bus and metro stop searches send the searched area’s coordinates to the public Overpass API. Map tile requests go to OpenStreetMap and may reveal the viewed area and your IP address.',
+                            'Your active destination, saved places, settings, and trip history are stored on this device. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Place queries may be processed by your device geocoding provider. Bus, metro, and railway stop searches send the searched area’s coordinates to the public Overpass API. Map tile requests go to OpenStreetMap and may reveal the viewed area and your IP address.',
                           ),
                         ),
                         actions: [

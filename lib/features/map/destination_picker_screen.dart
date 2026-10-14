@@ -43,7 +43,7 @@ class _DestinationPickerScreenState
   @override
   void initState() {
     super.initState();
-    mode = widget.initialMode ?? TravelMode.car;
+    mode = widget.initialMode ?? TravelMode.other;
     final query = widget.initialQuery;
     if (query != null) {
       searchController.text = query;
@@ -266,7 +266,7 @@ class _DestinationPickerScreenState
                       prefixIcon: Icon(Icons.search),
                       hintText:
                           mode.usesStops
-                              ? 'Search area for ${mode == TravelMode.bus ? 'bus stops' : 'metro stations'}'
+                              ? 'Search area for ${mode.placeName}'
                               : 'Search for a place',
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.all(16),
@@ -330,7 +330,7 @@ class _DestinationPickerScreenState
                           children: [
                             Expanded(
                               child: Text(
-                                '${mode == TravelMode.bus ? 'Bus stops' : 'Metro stations'} · ${areaName ?? 'Choose an area'}',
+                                '${mode.placeName} · ${areaName ?? 'Choose an area'}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context).textTheme.titleMedium,
@@ -367,7 +367,9 @@ class _DestinationPickerScreenState
                                       leading: Icon(
                                         mode == TravelMode.bus
                                             ? Icons.directions_bus
-                                            : Icons.subway,
+                                            : mode == TravelMode.metro
+                                            ? Icons.subway
+                                            : Icons.train,
                                       ),
                                       title: Text(stop.name),
                                       subtitle: Text(stop.address),

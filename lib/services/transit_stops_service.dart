@@ -33,7 +33,11 @@ class TransitStopsService {
         'nwr["railway"="station"]["station"="subway"](around:5000,$latitude,$longitude);'
             'nwr["railway"="station"]["subway"="yes"](around:5000,$latitude,$longitude);'
             'nwr["public_transport"="station"]["subway"="yes"](around:5000,$latitude,$longitude);',
-      _ => '',
+      TravelMode.railway =>
+        'nwr["railway"="station"](around:5000,$latitude,$longitude);'
+            'nwr["railway"="halt"](around:5000,$latitude,$longitude);'
+            'nwr["public_transport"="station"]["train"="yes"](around:5000,$latitude,$longitude);',
+      TravelMode.other => '',
     };
     final query = '[out:json][timeout:15];($filter);out center 200;';
     try {
@@ -120,6 +124,13 @@ List<Place> parseTransitStops(Object? body, TravelMode mode) {
   for (final item in body['elements'] as List) {
     if (item is! Map || item['tags'] is! Map) continue;
     final tags = item['tags'] as Map;
+    if (mode == TravelMode.railway &&
+        (tags['subway'] == 'yes' ||
+            tags['light_rail'] == 'yes' ||
+            tags['station'] == 'subway' ||
+            tags['station'] == 'light_rail')) {
+      continue;
+    }
     final name =
         tags['name'] is String ? (tags['name'] as String).trim() : null;
     if (name == null || name.isEmpty) continue;
@@ -131,7 +142,12 @@ List<Place> parseTransitStops(Object? body, TravelMode mode) {
     final place = Place(
       id: 'osm:${item['type']}:${item['id']}',
       name: name,
-      address: mode == TravelMode.bus ? 'Bus stop' : 'Metro station',
+      address: switch (mode) {
+        TravelMode.bus => 'Bus stop',
+        TravelMode.metro => 'Metro station',
+        TravelMode.railway => 'Railway station',
+        TravelMode.other => 'Place',
+      },
       latitude: lat.toDouble(),
       longitude: lon.toDouble(),
     );
@@ -140,7 +156,7 @@ List<Place> parseTransitStops(Object? body, TravelMode mode) {
       (other) =>
           other.name.toLowerCase() == name.toLowerCase() &&
           _roughDistanceMetres(other, place) <
-              (mode == TravelMode.metro ? 350 : 80),
+              (mode == TravelMode.bus ? 80 : 350),
     );
     if (!duplicate) places.add(place);
   }
