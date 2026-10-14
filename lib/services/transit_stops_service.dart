@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -25,65 +26,84 @@ class TransitStopsService {
         DateTime.now().difference(cached.$1) < const Duration(minutes: 10)) {
       return cached.$2;
     }
+    final radius = mode == TravelMode.railway ? 5000 : 2500;
     final filter = switch (mode) {
       TravelMode.bus =>
-        'nwr["highway"="bus_stop"](around:5000,$latitude,$longitude);'
-            'nwr["public_transport"="platform"]["bus"="yes"](around:5000,$latitude,$longitude);',
+        'nwr["highway"="bus_stop"](around:$radius,$latitude,$longitude);'
+            'nwr["public_transport"="platform"]["bus"="yes"](around:$radius,$latitude,$longitude);',
       TravelMode.metro =>
-        'nwr["railway"="station"]["station"="subway"](around:5000,$latitude,$longitude);'
-            'nwr["railway"="station"]["subway"="yes"](around:5000,$latitude,$longitude);'
-            'nwr["public_transport"="station"]["subway"="yes"](around:5000,$latitude,$longitude);',
+        'nwr["railway"="station"]["station"="subway"](around:$radius,$latitude,$longitude);'
+            'nwr["railway"="station"]["subway"="yes"](around:$radius,$latitude,$longitude);'
+            'nwr["public_transport"="station"]["subway"="yes"](around:$radius,$latitude,$longitude);',
       TravelMode.railway =>
-        'nwr["railway"="station"](around:5000,$latitude,$longitude);'
-            'nwr["railway"="halt"](around:5000,$latitude,$longitude);'
-            'nwr["public_transport"="station"]["train"="yes"](around:5000,$latitude,$longitude);',
+        'nwr["railway"="station"](around:$radius,$latitude,$longitude);'
+            'nwr["railway"="halt"](around:$radius,$latitude,$longitude);'
+            'nwr["public_transport"="station"]["train"="yes"](around:$radius,$latitude,$longitude);',
       TravelMode.other => '',
     };
     final query = '[out:json][timeout:15];($filter);out center 200;';
     try {
-      final request = await _client
-          .postUrl(Uri.parse(_endpoint))
-          .timeout(const Duration(seconds: 12));
-      request.headers.contentType = ContentType(
-        'application',
-        'x-www-form-urlencoded',
-        charset: 'utf-8',
-      );
-      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-      request.headers.set(
-        HttpHeaders.userAgentHeader,
-        'DestinationAlarm/1.0 (Android; OSM transit stop lookup)',
-      );
-      request.write('data=${Uri.encodeQueryComponent(query)}');
-      final response = await request.close().timeout(
-        const Duration(seconds: 22),
-      );
-      if (response.statusCode != HttpStatus.ok) {
-        throw const TransitStopsException(
-          'Stop search is busy. Try again shortly.',
+      for (var attempt = 0; attempt < 2; attempt++) {
+        final request = await _client
+            .postUrl(Uri.parse(_endpoint))
+            .timeout(const Duration(seconds: 12));
+        request.headers.contentType = ContentType(
+          'application',
+          'x-www-form-urlencoded',
+          charset: 'utf-8',
         );
-      }
-      final bytes = <int>[];
-      await for (final chunk in response.timeout(const Duration(seconds: 22))) {
-        bytes.addAll(chunk);
-        if (bytes.length > 2 * 1024 * 1024) {
-          throw const TransitStopsException(
-            'Too many stops returned. Search a smaller area.',
-          );
+        request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+        request.headers.set(
+          HttpHeaders.userAgentHeader,
+          'DestinationAlarm/1.0 (Android; OSM transit stop lookup)',
+        );
+        request.write('data=${Uri.encodeQueryComponent(query)}');
+        final response = await request.close().timeout(
+          const Duration(seconds: 22),
+        );
+        if (response.statusCode != HttpStatus.ok) {
+          final status = response.statusCode;
+          await response.drain<void>().timeout(const Duration(seconds: 3));
+          if (attempt == 0 &&
+              (status == HttpStatus.badGateway ||
+                  status == HttpStatus.serviceUnavailable ||
+                  status == HttpStatus.gatewayTimeout)) {
+            await Future<void>.delayed(const Duration(seconds: 2));
+            continue;
+          }
+          throw TransitStopsException(_statusMessage(status));
         }
+        final bytes = <int>[];
+        await for (final chunk in response.timeout(
+          const Duration(seconds: 22),
+        )) {
+          bytes.addAll(chunk);
+          if (bytes.length > 2 * 1024 * 1024) {
+            throw const TransitStopsException(
+              'Too many stops returned. Search a smaller area.',
+            );
+          }
+        }
+        final places = parseTransitStops(jsonDecode(utf8.decode(bytes)), mode);
+        places.sort(
+          (a, b) => _roughDistanceMetresTo(
+            latitude,
+            longitude,
+            a,
+          ).compareTo(_roughDistanceMetresTo(latitude, longitude, b)),
+        );
+        _cache[cacheKey] = (DateTime.now(), places);
+        return places;
       }
-      final places = parseTransitStops(jsonDecode(utf8.decode(bytes)), mode);
-      places.sort(
-        (a, b) => _roughDistanceMetresTo(
-          latitude,
-          longitude,
-          a,
-        ).compareTo(_roughDistanceMetresTo(latitude, longitude, b)),
+      throw const TransitStopsException(
+        'Stop search is unavailable. Retry in a moment.',
       );
-      _cache[cacheKey] = (DateTime.now(), places);
-      return places;
     } on TransitStopsException {
       rethrow;
+    } on TimeoutException {
+      throw const TransitStopsException(
+        'Stop search timed out. Retry in a moment.',
+      );
     } on SocketException {
       throw const TransitStopsException(
         'Connect to the internet to find stops.',
@@ -110,6 +130,17 @@ class TransitStopsService {
     _client.close(force: true);
   }
 }
+
+String _statusMessage(int status) => switch (status) {
+  HttpStatus.tooManyRequests =>
+    'Too many stop searches right now. Wait a minute, then retry.',
+  HttpStatus.badGateway ||
+  HttpStatus.serviceUnavailable ||
+  HttpStatus.gatewayTimeout => 'Stop search server is busy. Retry in a moment.',
+  HttpStatus.badRequest || HttpStatus.notAcceptable =>
+    'Stop search request was rejected. Please update the app.',
+  _ => 'Stop search is unavailable (HTTP $status). Retry later.',
+};
 
 class TransitStopsException implements Exception {
   const TransitStopsException(this.message);

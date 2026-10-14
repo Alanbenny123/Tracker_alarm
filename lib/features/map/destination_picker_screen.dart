@@ -347,15 +347,32 @@ class _DestinationPickerScreenState
                         child:
                             stops.isEmpty
                                 ? Center(
-                                  child: Text(
-                                    loadingStops
-                                        ? 'Finding mapped stops…'
-                                        : error != null
-                                        ? 'Could not load stops. Try another area or tap Near me.'
-                                        : areaCenter == null
-                                        ? 'Search an area or tap the map.'
-                                        : 'No mapped stops found here. Try another area.',
-                                    textAlign: TextAlign.center,
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        loadingStops
+                                            ? 'Finding mapped stops…'
+                                            : error != null
+                                            ? 'Could not load stops in this area.'
+                                            : areaCenter == null
+                                            ? 'Search an area or tap the map.'
+                                            : 'No mapped stops found here. Try another area.',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      if (error != null &&
+                                          areaCenter != null &&
+                                          !loadingStops)
+                                        TextButton.icon(
+                                          onPressed:
+                                              () => _loadStops(
+                                                areaCenter!,
+                                                areaName ?? 'Map point',
+                                              ),
+                                          icon: const Icon(Icons.refresh),
+                                          label: const Text('Retry'),
+                                        ),
+                                    ],
                                   ),
                                 )
                                 : ListView.builder(
