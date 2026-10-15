@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:tracker_alarm/models/destination_alarm.dart';
 import 'package:tracker_alarm/models/place.dart';
+import 'package:tracker_alarm/models/repeat_schedule.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
 import 'package:tracker_alarm/services/geofence_service.dart';
 import 'package:tracker_alarm/services/location_service.dart';
@@ -385,6 +386,30 @@ void main() {
     expect(alarm.alertAt, isNull);
     expect(alarm.repeatDays, 16);
     expect(alarm.repeatStartDay, day);
+    expect(native.entry(alarm.id).containsKey('alertAt'), false);
+  });
+
+  test('new distance alarm starts on the next selected weekday', () async {
+    final storage = MemoryStorage();
+    final native = FakeNative();
+    final controller = AlarmController(
+      storage,
+      native,
+      FakeLocation(),
+      HistoryController(storage),
+    );
+    await controller.restore();
+    final now = DateTime.now();
+    final selectedDay = DateTime(now.year, now.month, now.day + 3);
+    final days = 1 << (selectedDay.weekday - 1);
+
+    await controller.start(stationA, 500, true, 'Bell', null, days);
+
+    final alarm = controller.active!;
+    expect(alarm.repeatDays, days);
+    expect(alarm.repeatStartDay, selectedDay);
+    expect(alarm.repeatStartDay, nextRepeatDay(days, alarm.startedAt));
+    expect(native.entry(alarm.id)['repeatDays'], days);
     expect(native.entry(alarm.id).containsKey('alertAt'), false);
   });
 

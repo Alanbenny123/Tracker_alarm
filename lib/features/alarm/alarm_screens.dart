@@ -25,6 +25,73 @@ String _formatEta(Duration duration) {
 String _formatDateTime(BuildContext context, DateTime value) =>
     '${MaterialLocalizations.of(context).formatMediumDate(value)} at ${TimeOfDay.fromDateTime(value).format(context)}';
 
+Future<int?> _pickRepeatDays(BuildContext context, int currentDays) {
+  var selectedDays = currentDays;
+  return showModalBottomSheet<int>(
+    context: context,
+    isScrollControlled: true,
+    builder:
+        (sheetContext) => StatefulBuilder(
+          builder:
+              (sheetContext, setSheetState) => SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Repeat on selected days',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        children: List.generate(7, (index) {
+                          const labels = [
+                            'Mon',
+                            'Tue',
+                            'Wed',
+                            'Thu',
+                            'Fri',
+                            'Sat',
+                            'Sun',
+                          ];
+                          final bit = 1 << index;
+                          return FilterChip(
+                            label: Text(labels[index]),
+                            selected: (selectedDays & bit) != 0,
+                            onSelected:
+                                (selected) => setSheetState(() {
+                                  selectedDays =
+                                      selected
+                                          ? selectedDays | bit
+                                          : selectedDays & ~bit;
+                                }),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'The distance alarm rings only on these days. Leave all days unselected to turn repeat off.',
+                      ),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton(
+                          onPressed:
+                              () => Navigator.pop(sheetContext, selectedDays),
+                          child: const Text('Save'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+        ),
+  );
+}
+
 class AlarmSetupScreen extends ConsumerStatefulWidget {
   const AlarmSetupScreen({super.key, required this.place, required this.mode});
   final Place place;
@@ -46,6 +113,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   late final TextEditingController radiusController;
   String radiusUnit = 'm';
   String? radiusError;
+  int repeatDays = 0;
   late bool vibration;
   late String sound;
   @override
@@ -220,6 +288,11 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     });
   }
 
+  Future<void> _editRepeat() async {
+    final days = await _pickRepeatDays(context, repeatDays);
+    if (mounted && days != null) setState(() => repeatDays = days);
+  }
+
   @override
   Widget build(BuildContext context) {
     final position = ref.watch(locationProvider).position;
@@ -362,7 +435,16 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           const SizedBox(height: 8),
           Center(child: Text('${radius.toInt()} m radius')),
           const SizedBox(height: 12),
-          const Text('You can choose repeat days after starting the alarm.'),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.repeat),
+            title: const Text('Repeat'),
+            subtitle: Text(
+              repeatDays == 0 ? 'Off' : repeatDaysLabel(repeatDays),
+            ),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _editRepeat,
+          ),
           const SizedBox(height: 10),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -550,7 +632,14 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       try {
                         await ref
                             .read(alarmProvider)
-                            .start(selectedPlace, radius, vibration, sound);
+                            .start(
+                              selectedPlace,
+                              radius,
+                              vibration,
+                              sound,
+                              null,
+                              repeatDays,
+                            );
                         if (context.mounted) {
                           context.go(
                             ref.read(alarmProvider).status == 'triggered'
@@ -645,70 +734,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
   bool showMap = false;
 
   Future<void> _editRepeat(String id, int currentDays) async {
-    var selectedDays = currentDays;
-    final days = await showModalBottomSheet<int>(
-      context: context,
-      isScrollControlled: true,
-      builder:
-          (sheetContext) => StatefulBuilder(
-            builder:
-                (sheetContext, setSheetState) => SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Repeat on selected days',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          children: List.generate(7, (index) {
-                            const labels = [
-                              'Mon',
-                              'Tue',
-                              'Wed',
-                              'Thu',
-                              'Fri',
-                              'Sat',
-                              'Sun',
-                            ];
-                            final bit = 1 << index;
-                            return FilterChip(
-                              label: Text(labels[index]),
-                              selected: (selectedDays & bit) != 0,
-                              onSelected:
-                                  (selected) => setSheetState(() {
-                                    selectedDays =
-                                        selected
-                                            ? selectedDays | bit
-                                            : selectedDays & ~bit;
-                                  }),
-                            );
-                          }),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'Leave all days unselected to turn repeat off.',
-                        ),
-                        const SizedBox(height: 16),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: FilledButton(
-                            onPressed:
-                                () => Navigator.pop(sheetContext, selectedDays),
-                            child: const Text('Save'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-          ),
-    );
+    final days = await _pickRepeatDays(context, currentDays);
     if (days == null || days == currentDays || !mounted) return;
     try {
       await ref.read(alarmProvider).setRepeatDays(id, days);

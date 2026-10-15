@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../models/destination_alarm.dart';
 import '../models/place.dart';
+import '../models/repeat_schedule.dart';
 import '../services/geofence_service.dart';
 import '../services/location_service.dart';
 import '../services/storage_service.dart';
@@ -417,6 +418,10 @@ class AlarmController extends ChangeNotifier {
         throw LocationException(requirements.missingMessage);
       }
       final position = await _location.current();
+      final firstRepeatDay =
+          repeatDays == 0 || alertAt != null
+              ? repeatStartDay
+              : repeatStartDay ?? nextRepeatDay(repeatDays, DateTime.now());
       final alarm = DestinationAlarm(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         place: place,
@@ -427,13 +432,13 @@ class AlarmController extends ChangeNotifier {
         alertAt: alertAt,
         repeatDays: repeatDays,
         leadMinutes: leadMinutes,
-        repeatStartDay: repeatStartDay,
+        repeatStartDay: firstRepeatDay,
       );
       await _geofence.multiRegister(alarm);
       registered = true;
       _selectedId = alarm.id;
       final target =
-          repeatStartDay ?? alertAt?.add(Duration(minutes: leadMinutes));
+          firstRepeatDay ?? alertAt?.add(Duration(minutes: leadMinutes));
       final now = DateTime.now();
       final repeatDistanceReady =
           repeatDays == 0 ||
