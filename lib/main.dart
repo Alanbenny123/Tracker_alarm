@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import 'features/alarm/alarm_screens.dart';
 import 'features/home/home_screen.dart';
+import 'features/help/guide_screen.dart';
 import 'features/map/destination_picker_screen.dart';
 import 'models/alarm_setup_args.dart';
 import 'models/place.dart';
@@ -35,6 +36,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
   late final GoRouter router = GoRouter(
     routes: [
       GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      GoRoute(path: '/guide', builder: (context, state) => const GuideScreen()),
       GoRoute(
         path: '/pick',
         builder:

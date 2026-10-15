@@ -127,6 +127,14 @@ class _HomeTab extends ConsumerWidget {
             context,
           ).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => context.push('/guide'),
+            icon: const Icon(Icons.help_outline),
+            label: const Text('Guide & tutorial'),
+          ),
+        ),
         const SizedBox(height: 18),
         Text(
           'Choose transport',
@@ -479,6 +487,13 @@ class _SettingsTab extends ConsumerWidget {
           const Divider(),
           const ListTile(
             title: Text('APP', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.menu_book_outlined),
+            title: const Text('Guide & tutorial'),
+            subtitle: const Text('How to set alarms and solve common problems'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/guide'),
           ),
           ListTile(
             title: const Text('Appearance'),

@@ -11,6 +11,8 @@ import '../../services/places_service.dart';
 import '../../services/transit_stops_service.dart';
 import 'map_view.dart';
 
+enum _SearchErrorSource { place, stops, nearby }
+
 class DestinationPickerScreen extends ConsumerStatefulWidget {
   const DestinationPickerScreen({
     super.key,
@@ -40,6 +42,7 @@ class _DestinationPickerScreenState
   LatLng? areaCenter;
   String? areaName;
   String? error;
+  _SearchErrorSource? errorSource;
   bool searching = false;
   bool loadingStops = false;
 
@@ -78,12 +81,14 @@ class _DestinationPickerScreenState
         results = [];
         searching = false;
         error = null;
+        errorSource = null;
       });
       return;
     }
     setState(() {
       searching = true;
       error = null;
+      errorSource = null;
     });
     try {
       final found = await placesService.search(text);
@@ -96,7 +101,10 @@ class _DestinationPickerScreenState
     } catch (e) {
       if (mounted) {
         setState(() {
-          if (generation == searchGeneration) error = e.toString();
+          if (generation == searchGeneration) {
+            error = e.toString();
+            errorSource = _SearchErrorSource.place;
+          }
           if (generation == searchGeneration) searching = false;
         });
       }
@@ -113,6 +121,7 @@ class _DestinationPickerScreenState
       areaCenter = null;
       areaName = null;
       error = null;
+      errorSource = null;
       searchController.clear();
       searchGeneration++;
       stopGeneration++;
@@ -125,9 +134,10 @@ class _DestinationPickerScreenState
   void _loadNearby() {
     final position = ref.read(locationProvider).position;
     if (position == null) {
-      setState(
-        () => error = 'Waiting for GPS. Search an area, or try nearby again.',
-      );
+      setState(() {
+        error = 'Waiting for GPS. Search an area, or try nearby again.';
+        errorSource = _SearchErrorSource.nearby;
+      });
       return;
     }
     _loadStops(LatLng(position.latitude, position.longitude), 'Near me');
@@ -145,6 +155,7 @@ class _DestinationPickerScreenState
       loadingStops = true;
       searching = false;
       error = null;
+      errorSource = null;
     });
     try {
       final found = await stopsService.nearby(
@@ -161,8 +172,26 @@ class _DestinationPickerScreenState
       if (!mounted || generation != stopGeneration) return;
       setState(() {
         error = e.toString();
+        errorSource = _SearchErrorSource.stops;
         loadingStops = false;
       });
+    }
+  }
+
+  void _retrySearch() {
+    switch (errorSource) {
+      case _SearchErrorSource.place:
+        search();
+        return;
+      case _SearchErrorSource.stops:
+        final center = areaCenter;
+        if (center != null) _loadStops(center, areaName ?? 'Map point');
+        return;
+      case _SearchErrorSource.nearby:
+        _loadNearby();
+        return;
+      case null:
+        break;
     }
   }
 
@@ -262,6 +291,7 @@ class _DestinationPickerScreenState
                       setState(() {
                         results = [];
                         error = null;
+                        errorSource = null;
                         searching = false;
                       });
                     },
@@ -285,11 +315,23 @@ class _DestinationPickerScreenState
                   if (error != null)
                     Padding(
                       padding: const EdgeInsets.all(12),
-                      child: Text(
-                        error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            error!,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          FilledButton.tonalIcon(
+                            onPressed:
+                                errorSource == null ? null : _retrySearch,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Retry search'),
+                          ),
+                        ],
                       ),
                     ),
                   if (results.isNotEmpty)
@@ -363,18 +405,6 @@ class _DestinationPickerScreenState
                                             : 'No mapped stops found here. Try another area.',
                                         textAlign: TextAlign.center,
                                       ),
-                                      if (error != null &&
-                                          areaCenter != null &&
-                                          !loadingStops)
-                                        TextButton.icon(
-                                          onPressed:
-                                              () => _loadStops(
-                                                areaCenter!,
-                                                areaName ?? 'Map point',
-                                              ),
-                                          icon: const Icon(Icons.refresh),
-                                          label: const Text('Retry'),
-                                        ),
                                     ],
                                   ),
                                 )
