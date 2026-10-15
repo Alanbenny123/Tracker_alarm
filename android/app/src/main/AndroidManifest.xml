@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application android:label="Destination Alarm" android:name="${applicationName}" android:icon="@drawable/ic_launcher">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:taskAffinity="" android:theme="@style/LaunchTheme" android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode" android:hardwareAccelerated="true" android:windowSoftInputMode="adjustResize">
             <meta-data android:name="io.flutter.embedding.android.NormalTheme" android:resource="@style/NormalTheme" />
@@ -22,8 +23,19 @@
         <meta-data android:name="flutterEmbedding" android:value="2" />
         <receiver android:name=".GeofenceReceiver" android:exported="false" />
         <receiver android:name=".AlarmActionReceiver" android:exported="false" />
+        <receiver android:name=".MultiAlarmReceiver" android:exported="false" />
+        <receiver android:name=".AlarmRestoreReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+        <receiver android:name=".MultiGeofenceReceiver" android:exported="false" />
         <service android:name=".DestinationTrackingService" android:exported="false" android:foregroundServiceType="location|mediaPlayback" />
         <service android:name=".AlarmPlaybackService" android:exported="false" android:foregroundServiceType="mediaPlayback" />
+        <service android:name=".MultiTrackingService" android:exported="false" android:foregroundServiceType="location|mediaPlayback" />
     </application>
     <queries><intent><action android:name="android.intent.action.VIEW"/><data android:scheme="https"/></intent></queries>
 </manifest>

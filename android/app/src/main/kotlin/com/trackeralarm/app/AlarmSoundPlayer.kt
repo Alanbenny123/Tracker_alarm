@@ -16,8 +16,13 @@ class AlarmSoundPlayer(private val context: Context) {
 
     @Suppress("DEPRECATION")
     fun start() {
-        if (player != null) return
         val sound = AlarmRuntime.prefs(context).getString("sound", "Default alarm")
+        start(sound ?: "Default alarm", AlarmRuntime.prefs(context).getBoolean("vibration", true))
+    }
+
+    @Suppress("DEPRECATION")
+    fun start(sound: String, vibration: Boolean) {
+        if (player != null) return
         val resId = when (sound) {
             "Bell" -> R.raw.bell
             "Digital" -> R.raw.digital
@@ -30,7 +35,7 @@ class AlarmSoundPlayer(private val context: Context) {
         } catch (_: Exception) {
             try { createPlayer(R.raw.beep) } catch (_: Exception) { null }
         }
-        if (AlarmRuntime.prefs(context).getBoolean("vibration", true)) {
+        if (vibration) {
             try {
                 vibrator = getVibratorCompat()
                 val pattern = longArrayOf(0, 500, 350, 500, 700)

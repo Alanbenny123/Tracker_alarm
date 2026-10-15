@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'features/alarm/alarm_screens.dart';
 import 'features/home/home_screen.dart';
 import 'features/map/destination_picker_screen.dart';
+import 'models/alarm_setup_args.dart';
 import 'models/place.dart';
 import 'models/travel_mode.dart';
 import 'providers/app_providers.dart';
@@ -46,8 +47,17 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       ),
       GoRoute(
         path: '/setup',
-        builder:
-            (context, state) => AlarmSetupScreen(place: state.extra! as Place),
+        builder: (context, state) {
+          final extra = state.extra!;
+          final args =
+              extra is AlarmSetupArgs
+                  ? extra
+                  : AlarmSetupArgs(
+                    place: extra as Place,
+                    mode: TravelMode.other,
+                  );
+          return AlarmSetupScreen(place: args.place, mode: args.mode);
+        },
       ),
       GoRoute(
         path: '/active',
@@ -87,15 +97,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
         await Future<void>.delayed(minimumVisibleTime - loadingTimer.elapsed);
       }
       if (!mounted) return;
-      if (ref.read(alarmProvider).active != null) {
-        _messengerKey.currentState?.showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Cancel the current alarm before choosing a shared destination.',
-            ),
-          ),
-        );
-      } else if (place == null) {
+      if (place == null) {
         final query =
             _shareService.searchQuery(text) ?? _shareService.resolvedQuery;
         if (query != null) {

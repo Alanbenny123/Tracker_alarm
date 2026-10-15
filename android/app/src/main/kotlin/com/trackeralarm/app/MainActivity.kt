@@ -51,6 +51,46 @@ class MainActivity : FlutterActivity() {
         acceptShare(intent)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/geofence").setMethodCallHandler { call, result ->
             when (call.method) {
+                "multiStates" -> result.success(MultiAlarmRuntime.states(this))
+                "multiRegister" -> {
+                    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
+                        (Build.VERSION.SDK_INT >= 29 && checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
+                        result.error("permission", "Precise and background location permission are required.", null)
+                        return@setMethodCallHandler
+                    }
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments as? Map<String, Any> ?: run {
+                        result.error("arguments", "Missing destination", null); return@setMethodCallHandler
+                    }
+                    MultiAlarmRuntime.register(this, args, result)
+                }
+                "multiEnsure" -> {
+                    MultiAlarmRuntime.refresh(this)
+                    MultiAlarmRuntime.ensureGeofences(this)
+                    result.success(null)
+                }
+                "multiFinish", "multiForget", "multiDismiss", "multiSnooze", "multiTrigger" -> {
+                    val id = call.argument<String>("id")
+                    if (id.isNullOrBlank()) {
+                        result.error("arguments", "Missing alarm ID", null)
+                        return@setMethodCallHandler
+                    }
+                    when (call.method) {
+                        "multiFinish" -> {
+                            val status = call.argument<String>("status")
+                            if (status != "cancelled" && status != "completed") {
+                                result.error("arguments", "Invalid finish status", null)
+                                return@setMethodCallHandler
+                            }
+                            MultiAlarmRuntime.finish(this, id, status)
+                        }
+                        "multiForget" -> MultiAlarmRuntime.forget(this, id)
+                        "multiDismiss" -> MultiAlarmRuntime.dismiss(this, id)
+                        "multiSnooze" -> MultiAlarmRuntime.snooze(this, id, call.argument<Int>("minutes") ?: 1)
+                        "multiTrigger" -> MultiAlarmRuntime.trigger(this, id, "distance")
+                    }
+                    result.success(null)
+                }
                 "register" -> {
                     if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
                         (Build.VERSION.SDK_INT >= 29 && checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)) {

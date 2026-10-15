@@ -1,6 +1,11 @@
 enum TravelMode { bus, metro, railway, other }
 
 extension TravelModeLabel on TravelMode {
+  double get defaultAlertRadius => switch (this) {
+    TravelMode.bus || TravelMode.metro => 500,
+    TravelMode.railway || TravelMode.other => 1000,
+  };
+
   String get label => switch (this) {
     TravelMode.bus => 'Bus',
     TravelMode.metro => 'Metro',

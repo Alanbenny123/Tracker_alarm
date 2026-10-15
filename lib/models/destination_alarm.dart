@@ -9,6 +9,9 @@ class DestinationAlarm {
     required this.sound,
     required this.startedAt,
     this.alertAt,
+    this.repeatDays = 0,
+    this.leadMinutes = 0,
+    this.repeatStartDay,
   });
 
   final String id;
@@ -19,6 +22,11 @@ class DestinationAlarm {
   final DateTime startedAt;
   final DateTime? alertAt;
 
+  /// Monday is bit 0 and Sunday is bit 6. Zero means one-time.
+  final int repeatDays;
+  final int leadMinutes;
+  final DateTime? repeatStartDay;
+
   Map<String, dynamic> toJson() => {
     'id': id,
     'place': place.toJson(),
@@ -27,6 +35,9 @@ class DestinationAlarm {
     'sound': sound,
     'startedAt': startedAt.toIso8601String(),
     'alertAt': alertAt?.toIso8601String(),
+    'repeatDays': repeatDays,
+    'leadMinutes': leadMinutes,
+    'repeatStartDay': repeatStartDay?.toIso8601String(),
   };
 
   factory DestinationAlarm.fromJson(Map<String, dynamic> json) =>
@@ -41,6 +52,12 @@ class DestinationAlarm {
             json['alertAt'] == null
                 ? null
                 : DateTime.parse(json['alertAt'] as String),
+        repeatDays: (json['repeatDays'] as num?)?.toInt() ?? 0,
+        leadMinutes: (json['leadMinutes'] as num?)?.toInt() ?? 0,
+        repeatStartDay:
+            json['repeatStartDay'] == null
+                ? null
+                : DateTime.parse(json['repeatStartDay'] as String),
       );
 }
 

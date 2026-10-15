@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../models/place.dart';
+import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../map/map_view.dart';
@@ -17,26 +20,39 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   int index = 0;
+  Timer? _statusTimer;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(locationProvider).refreshAndTrack();
+      ref.read(alarmProvider).syncStatus();
     });
+    _statusTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => ref.read(alarmProvider).syncStatus(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _statusTimer?.cancel();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final alarm = ref.watch(alarmProvider);
-    ref.listen(alarmProvider, (previous, next) {
-      if (next.active != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            context.go(next.status == 'triggered' ? '/triggered' : '/active');
-          }
-        });
+    ref.listen(locationProvider, (_, next) {
+      if (next.position != null) {
+        ref.read(alarmProvider).checkVisiblePosition(next.position!);
       }
     });
+    if (alarm.hasTriggered) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go('/triggered');
+      });
+    }
     if (alarm.restoring) {
       return const Scaffold(
         body: Center(
@@ -92,7 +108,7 @@ class _HomeTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = ref.watch(locationProvider);
-    final active = ref.watch(alarmProvider).active;
+    final activeAlarms = ref.watch(alarmProvider).alarms;
     final saved = ref.watch(placesProvider).places;
     final history = ref.watch(historyProvider).trips;
     return ListView(
@@ -145,16 +161,41 @@ class _HomeTab extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 18),
-        if (active != null)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.notifications_active),
-              title: Text(active.place.name),
-              subtitle: const Text('Destination alarm active'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.push('/active'),
-            ),
+        if (activeAlarms.isNotEmpty) ...[
+          Text(
+            'Active alarms (${activeAlarms.length})',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
+          const SizedBox(height: 8),
+          for (final entry in activeAlarms)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.notifications_active),
+                title: Text(entry.alarm.place.name),
+                subtitle: Text(
+                  '${formatDistance(entry.alarm.radius)} · '
+                  '${entry.alarm.alertAt == null ? 'Distance only' : '${MaterialLocalizations.of(context).formatMediumDate(entry.alarm.alertAt!)} '
+                          '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.alarm.alertAt!))}'} · '
+                  '${entry.alarm.repeatDays == 0 ? '' : 'Repeats ${repeatDaysLabel(entry.alarm.repeatDays)} · '}'
+                  '${entry.status == 'triggered'
+                      ? 'Ringing'
+                      : entry.status == 'snoozed'
+                      ? 'Snoozed'
+                      : entry.alarm.repeatDays != 0 && !entry.distanceReady
+                      ? 'Scheduled'
+                      : 'Monitoring'}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  ref.read(alarmProvider).select(entry.alarm.id);
+                  context.push(
+                    entry.status == 'triggered' ? '/triggered' : '/active',
+                  );
+                },
+              ),
+            ),
+          const SizedBox(height: 12),
+        ],
         SizedBox(
           height: 220,
           child: ClipRRect(
@@ -405,11 +446,9 @@ class _SettingsTab extends ConsumerWidget {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          ListTile(
-            title: const Text('Default radius'),
-            subtitle: Text('${settings.defaultRadius.toInt()} m'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _pickRadius(context, settings),
+          const ListTile(
+            title: Text('Starting alert radius'),
+            subtitle: Text('Bus and Metro: 500 m · Railway and Other: 1 km'),
           ),
           ListTile(
             title: const Text('Alarm sound'),
@@ -504,28 +543,6 @@ class _SettingsTab extends ConsumerWidget {
     );
   }
 
-  void _pickRadius(BuildContext context, SettingsController settings) =>
-      showModalBottomSheet<void>(
-        context: context,
-        builder:
-            (context) => SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const ListTile(title: Text('Default radius')),
-                  ...[100.0, 250.0, 500.0, 1000.0, 2000.0].map(
-                    (value) => ListTile(
-                      title: Text('${value.toInt()} m'),
-                      onTap: () {
-                        settings.setRadius(value);
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-      );
   void _pickSound(BuildContext context, SettingsController settings) =>
       showModalBottomSheet<void>(
         context: context,

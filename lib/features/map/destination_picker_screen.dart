@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../models/alarm_setup_args.dart';
 import '../../models/place.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
@@ -201,7 +202,7 @@ class _DestinationPickerScreenState
   @override
   Widget build(BuildContext context) {
     final position = ref.watch(locationProvider).position;
-    final radius = ref.watch(settingsProvider).defaultRadius;
+    final radius = mode.defaultAlertRadius;
     return Scaffold(
       appBar: AppBar(title: const Text('Choose destination')),
       body: Stack(
@@ -436,7 +437,13 @@ class _DestinationPickerScreenState
                       const SizedBox(height: 12),
                       FilledButton(
                         onPressed:
-                            () => context.push('/setup', extra: selected),
+                            () => context.push(
+                              '/setup',
+                              extra: AlarmSetupArgs(
+                                place: selected!,
+                                mode: mode,
+                              ),
+                            ),
                         child: const Text('Confirm destination'),
                       ),
                       const SizedBox(height: 4),

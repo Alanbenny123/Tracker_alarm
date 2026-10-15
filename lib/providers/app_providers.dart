@@ -205,121 +205,188 @@ class LocationController extends ChangeNotifier {
   }
 }
 
+class AlarmProgress {
+  const AlarmProgress({
+    required this.alarm,
+    required this.status,
+    required this.timeFired,
+    required this.distanceFired,
+    required this.triggerReason,
+    required this.triggeredAt,
+    this.distanceReady = true,
+  });
+
+  final DestinationAlarm alarm;
+  final String status;
+  final bool timeFired;
+  final bool distanceFired;
+  final String triggerReason;
+  final int triggeredAt;
+  final bool distanceReady;
+
+  bool get live =>
+      status == 'active' || status == 'triggered' || status == 'snoozed';
+}
+
 class AlarmController extends ChangeNotifier {
   AlarmController(this._storage, this._geofence, this._location, this._history);
+
   final StorageService _storage;
   final GeofenceService _geofence;
   final LocationService _location;
   final HistoryController _history;
-  DestinationAlarm? active;
-  String status = 'inactive';
+  List<AlarmProgress> _entries = [];
+  String? _selectedId;
   String? error;
   bool busy = false;
   bool restoring = true;
   bool _triggering = false;
   bool _syncing = false;
-  bool timeFired = false;
-  bool distanceFired = false;
-  String triggerReason = 'distance';
 
-  bool _readProgress(Map<String, dynamic>? native) {
-    if (native == null) return false;
-    final nextTime = native['timeFired'] == true;
-    final nextDistance = native['distanceFired'] == true;
-    final nextReason = native['triggerReason'] as String? ?? 'distance';
-    final changed =
-        nextTime != timeFired ||
-        nextDistance != distanceFired ||
-        nextReason != triggerReason;
-    timeFired = nextTime;
-    distanceFired = nextDistance;
-    triggerReason = nextReason;
-    return changed;
+  List<AlarmProgress> get alarms => List.unmodifiable(_entries);
+  AlarmProgress? get selected {
+    for (final entry in _entries) {
+      if (entry.alarm.id == _selectedId) return entry;
+    }
+    return _entries.isEmpty ? null : _entries.first;
   }
+
+  DestinationAlarm? get active => selected?.alarm;
+  String get status => selected?.status ?? 'inactive';
+  bool get timeFired => selected?.timeFired ?? false;
+  bool get distanceFired => selected?.distanceFired ?? false;
+  String get triggerReason => selected?.triggerReason ?? 'distance';
+  bool get hasTriggered => _entries.any((entry) => entry.status == 'triggered');
+
+  void select(String id) {
+    if (_selectedId == id || !_entries.any((e) => e.alarm.id == id)) return;
+    _selectedId = id;
+    notifyListeners();
+  }
+
+  AlarmProgress _parse(Map<String, dynamic> state) {
+    final alertAt = state['alertAt'] as num?;
+    return AlarmProgress(
+      alarm: DestinationAlarm(
+        id: state['id'] as String,
+        place: Place(
+          name: state['name'] as String,
+          address: state['address'] as String? ?? '',
+          latitude: (state['latitude'] as num).toDouble(),
+          longitude: (state['longitude'] as num).toDouble(),
+        ),
+        radius: (state['radius'] as num).toDouble(),
+        vibration: state['vibration'] as bool? ?? true,
+        sound: state['sound'] as String? ?? 'Default alarm',
+        startedAt: DateTime.fromMillisecondsSinceEpoch(
+          (state['startedAt'] as num).toInt(),
+        ),
+        alertAt:
+            alertAt == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(alertAt.toInt()),
+        repeatDays: (state['repeatDays'] as num?)?.toInt() ?? 0,
+        leadMinutes: (state['leadMinutes'] as num?)?.toInt() ?? 0,
+        repeatStartDay:
+            state['repeatStartDay'] == null
+                ? null
+                : DateTime.fromMillisecondsSinceEpoch(
+                  (state['repeatStartDay'] as num).toInt(),
+                ),
+      ),
+      status: state['status'] as String? ?? 'active',
+      timeFired: state['timeFired'] == true,
+      distanceFired: state['distanceFired'] == true,
+      triggerReason: state['triggerReason'] as String? ?? 'distance',
+      triggeredAt: (state['triggeredAt'] as num?)?.toInt() ?? 0,
+      distanceReady: state['distanceReady'] as bool? ?? true,
+    );
+  }
+
+  Future<void> _applyNativeStates(List<Map<String, dynamic>> states) async {
+    final next = <AlarmProgress>[];
+    for (final state in states) {
+      final entry = _parse(state);
+      if (entry.live) {
+        next.add(entry);
+      } else {
+        await _history.add(
+          TripRecord(
+            alarm: entry.alarm,
+            endedAt: DateTime.now(),
+            status: entry.status,
+          ),
+        );
+        await _geofence.multiForget(entry.alarm.id);
+      }
+    }
+    final previousSignature = _entries.map(_signature).join('|');
+    final nextSignature = next.map(_signature).join('|');
+    final oldSelected = _selectedId;
+    _entries = next;
+    final ringing =
+        next.where((entry) => entry.status == 'triggered').toList()
+          ..sort((a, b) {
+            final order = a.triggeredAt.compareTo(b.triggeredAt);
+            return order != 0
+                ? order
+                : a.alarm.startedAt.compareTo(b.alarm.startedAt);
+          });
+    if (ringing.isNotEmpty) {
+      _selectedId = ringing.first.alarm.id;
+    } else if (!next.any((entry) => entry.alarm.id == _selectedId)) {
+      _selectedId = next.isEmpty ? null : next.first.alarm.id;
+    }
+    if (previousSignature != nextSignature ||
+        oldSelected != _selectedId ||
+        error != null) {
+      error = null;
+      notifyListeners();
+    }
+  }
+
+  String _signature(AlarmProgress entry) =>
+      '${entry.alarm.id}:${entry.status}:${entry.timeFired}:'
+      '${entry.distanceFired}:${entry.distanceReady}:${entry.alarm.alertAt}:'
+      '${entry.triggerReason}:${entry.triggeredAt}';
 
   Future<void> restore() async {
     try {
-      final raw = await _storage.getString('active_alarm');
-      if (raw != null && raw.isNotEmpty) {
-        active = DestinationAlarm.fromJson(
-          Map<String, dynamic>.from(jsonDecode(raw) as Map),
+      final legacyRaw = await _storage.getString('active_alarm');
+      final states = await _geofence.multiStates();
+      if (legacyRaw != null && legacyRaw.isNotEmpty) {
+        final legacy = DestinationAlarm.fromJson(
+          Map<String, dynamic>.from(jsonDecode(legacyRaw) as Map),
         );
-      }
-      status = await _geofence.status();
-      if (active == null &&
-          (status == 'active' ||
-              status == 'snoozed' ||
-              status == 'triggered')) {
-        final native = await _geofence.state();
-        if (native != null) {
-          active = DestinationAlarm(
-            id: native['id'] as String,
-            place: Place(
-              name: native['name'] as String,
-              address: native['address'] as String,
-              latitude: (native['latitude'] as num).toDouble(),
-              longitude: (native['longitude'] as num).toDouble(),
-            ),
-            radius: (native['radius'] as num).toDouble(),
-            vibration: native['vibration'] as bool,
-            sound: native['sound'] as String,
-            startedAt: DateTime.fromMillisecondsSinceEpoch(
-              (native['startedAt'] as num).toInt(),
-            ),
-            alertAt:
-                native['alertAt'] == null
-                    ? null
-                    : DateTime.fromMillisecondsSinceEpoch(
-                      (native['alertAt'] as num).toInt(),
-                    ),
-          );
-          await _storage.setString(
-            'active_alarm',
-            jsonEncode(active!.toJson()),
-          );
+        if (!states.any((state) => state['id'] == legacy.id)) {
+          final legacyStatus = await _geofence.status();
+          if (legacyStatus == 'completed' || legacyStatus == 'cancelled') {
+            await _history.add(
+              TripRecord(
+                alarm: legacy,
+                endedAt: DateTime.now(),
+                status: legacyStatus,
+              ),
+            );
+          }
         }
+        await _storage.setString('active_alarm', '');
       }
-      if (active != null && (status == 'completed' || status == 'cancelled')) {
-        await _archiveNativeFinish(status);
-      }
-      if (active != null && status == 'inactive') {
-        await _geofence.register(active!);
-        status = 'active';
-      } else if (active != null &&
-          (status == 'active' || status == 'snoozed')) {
-        await _geofence.ensure();
-      } else if (active != null && status == 'triggered') {
-        await _geofence.resumeTriggered();
-      }
-      if (active != null) _readProgress(await _geofence.state());
+      await _applyNativeStates(states);
+      if (_entries.isNotEmpty) await _geofence.multiEnsure();
     } catch (e) {
-      error = 'Could not restore the active alarm: $e';
+      error = 'Could not restore destination alarms: $e';
     }
     restoring = false;
     notifyListeners();
   }
 
   Future<void> syncStatus() async {
-    if (active == null || _syncing) return;
-    final currentAlarm = active;
+    if (_syncing) return;
     _syncing = true;
     try {
-      final nextStatus = await _geofence.status();
-      if (active != currentAlarm) return;
-      final native = await _geofence.state();
-      if (active != currentAlarm) return;
-      final progressChanged = _readProgress(native);
-      final changed = nextStatus != status || error != null || progressChanged;
-      status = nextStatus;
-      if (status == 'completed' || status == 'cancelled') {
-        await _archiveNativeFinish(status);
-        notifyListeners();
-      } else if (changed) {
-        error = null;
-        notifyListeners();
-      }
+      await _applyNativeStates(await _geofence.multiStates());
     } catch (e) {
-      if (active != currentAlarm) return;
       final nextError = e.toString();
       if (error != nextError) {
         error = nextError;
@@ -330,32 +397,20 @@ class AlarmController extends ChangeNotifier {
     }
   }
 
-  Future<void> _archiveNativeFinish(String result) async {
-    final alarm = active;
-    if (alarm == null) return;
-    await _history.add(
-      TripRecord(alarm: alarm, endedAt: DateTime.now(), status: result),
-    );
-    await _storage.setString('active_alarm', '');
-    active = null;
-    status = 'inactive';
-  }
-
   Future<void> start(
     Place place,
     double radius,
     bool vibration,
     String sound, [
     DateTime? alertAt,
+    int repeatDays = 0,
+    int leadMinutes = 0,
+    DateTime? repeatStartDay,
   ]) async {
-    if (active != null) {
-      throw StateError(
-        'Cancel the current destination alarm before starting another.',
-      );
-    }
     busy = true;
     error = null;
     notifyListeners();
+    var registered = false;
     try {
       final requirements = await _geofence.requirements();
       if (!requirements.ready) {
@@ -370,21 +425,37 @@ class AlarmController extends ChangeNotifier {
         sound: sound,
         startedAt: DateTime.now(),
         alertAt: alertAt,
+        repeatDays: repeatDays,
+        leadMinutes: leadMinutes,
+        repeatStartDay: repeatStartDay,
       );
-      await _geofence.register(alarm);
-      await _storage.setString('active_alarm', jsonEncode(alarm.toJson()));
-      active = alarm;
-      status = 'active';
-      timeFired = false;
-      distanceFired = false;
-      triggerReason = 'distance';
-      if (_location.distance(position, place.latitude, place.longitude) <=
-          radius) {
-        await _geofence.trigger();
-        status = await _geofence.status();
-        _readProgress(await _geofence.state());
+      await _geofence.multiRegister(alarm);
+      registered = true;
+      _selectedId = alarm.id;
+      final target =
+          repeatStartDay ?? alertAt?.add(Duration(minutes: leadMinutes));
+      final now = DateTime.now();
+      final repeatDistanceReady =
+          repeatDays == 0 ||
+          (target != null &&
+              target.year == now.year &&
+              target.month == now.month &&
+              target.day == now.day);
+      if (repeatDistanceReady &&
+          position.accuracy <= radius &&
+          _location.distance(position, place.latitude, place.longitude) <=
+              radius) {
+        await _geofence.multiTrigger(alarm.id);
       }
+      await _applyNativeStates(await _geofence.multiStates());
     } catch (e) {
+      if (registered) {
+        try {
+          await _applyNativeStates(await _geofence.multiStates());
+        } catch (_) {
+          // The native alarm remains saved; the next status sync can recover it.
+        }
+      }
       error = e.toString();
       rethrow;
     } finally {
@@ -393,49 +464,17 @@ class AlarmController extends ChangeNotifier {
     }
   }
 
-  Future<void> cancel() => _finish('cancelled');
-  Future<void> stop() => _finish('completed');
+  Future<void> cancel([String? id]) => _finish('cancelled', id);
+  Future<void> stop([String? id]) => _finish('completed', id);
 
-  Future<void> dismissCurrent() async {
-    if (active == null || status != 'triggered') return;
-    busy = true;
-    error = null;
-    notifyListeners();
-    try {
-      await _geofence.dismissCurrent();
-      status = await _geofence.status();
-      if (status == 'completed') {
-        await _archiveNativeFinish('completed');
-      } else {
-        _readProgress(await _geofence.state());
-      }
-    } catch (e) {
-      error = e.toString();
-      rethrow;
-    } finally {
-      busy = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> _finish(String result) async {
-    final alarm = active;
-    if (alarm == null) return;
+  Future<void> _finish(String result, String? targetId) async {
+    final id = targetId ?? active?.id;
+    if (id == null || !_entries.any((entry) => entry.alarm.id == id)) return;
     busy = true;
     notifyListeners();
     try {
-      if (result == 'completed') {
-        await _geofence.stop();
-      } else {
-        await _geofence.cancel();
-      }
-      await _history.add(
-        TripRecord(alarm: alarm, endedAt: DateTime.now(), status: result),
-      );
-      await _storage.setString('active_alarm', '');
-      active = null;
-      status = 'inactive';
-      error = null;
+      await _geofence.multiFinish(id, result);
+      await _applyNativeStates(await _geofence.multiStates());
     } catch (e) {
       error = e.toString();
       rethrow;
@@ -445,11 +484,39 @@ class AlarmController extends ChangeNotifier {
     }
   }
 
-  Future<void> snooze(int minutes) async {
+  Future<void> dismissCurrent([String? targetId]) async {
+    final id = targetId ?? active?.id;
+    if (id == null ||
+        !_entries.any(
+          (entry) => entry.alarm.id == id && entry.status == 'triggered',
+        )) {
+      return;
+    }
+    busy = true;
+    notifyListeners();
     try {
-      await _geofence.snooze(minutes);
-      status = 'snoozed';
+      await _geofence.multiDismiss(id);
+      await _applyNativeStates(await _geofence.multiStates());
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      busy = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> snooze(int minutes, [String? targetId]) async {
+    final id = targetId ?? active?.id;
+    if (id == null ||
+        !_entries.any(
+          (entry) => entry.alarm.id == id && entry.status == 'triggered',
+        )) {
+      return;
+    }
+    try {
+      await _geofence.multiSnooze(id, minutes);
+      await _applyNativeStates(await _geofence.multiStates());
     } catch (e) {
       error = e.toString();
       notifyListeners();
@@ -458,27 +525,45 @@ class AlarmController extends ChangeNotifier {
   }
 
   Future<void> checkVisiblePosition(Position position) async {
-    final alarm = active;
-    if (alarm == null ||
-        distanceFired ||
-        (status != 'active' && status != 'triggered') ||
-        _triggering) {
-      return;
-    }
-    if (_location.distance(
-          position,
-          alarm.place.latitude,
-          alarm.place.longitude,
-        ) >
-        alarm.radius) {
-      return;
-    }
+    if (_triggering) return;
+    final reached =
+        _entries
+            .where(
+              (entry) =>
+                  entry.live &&
+                  entry.distanceReady &&
+                  !entry.distanceFired &&
+                  position.accuracy <= entry.alarm.radius &&
+                  _location.distance(
+                        position,
+                        entry.alarm.place.latitude,
+                        entry.alarm.place.longitude,
+                      ) <=
+                      entry.alarm.radius,
+            )
+            .toList()
+          ..sort(
+            (a, b) => _location
+                .distance(
+                  position,
+                  a.alarm.place.latitude,
+                  a.alarm.place.longitude,
+                )
+                .compareTo(
+                  _location.distance(
+                    position,
+                    b.alarm.place.latitude,
+                    b.alarm.place.longitude,
+                  ),
+                ),
+          );
+    if (reached.isEmpty) return;
     _triggering = true;
     try {
-      await _geofence.trigger();
-      status = await _geofence.status();
-      _readProgress(await _geofence.state());
-      notifyListeners();
+      for (final entry in reached) {
+        await _geofence.multiTrigger(entry.alarm.id);
+      }
+      await _applyNativeStates(await _geofence.multiStates());
     } catch (e) {
       error = e.toString();
       notifyListeners();

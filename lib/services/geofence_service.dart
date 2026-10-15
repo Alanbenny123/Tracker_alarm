@@ -47,6 +47,43 @@ class AlarmRequirements {
 class GeofenceService {
   static const _channel = MethodChannel('tracker_alarm/geofence');
 
+  Future<List<Map<String, dynamic>>> multiStates() async {
+    final states =
+        await _channel.invokeListMethod<dynamic>('multiStates') ?? [];
+    return states
+        .map((value) => Map<String, dynamic>.from(value as Map))
+        .toList();
+  }
+
+  Future<void> multiRegister(DestinationAlarm alarm) =>
+      _channel.invokeMethod<void>('multiRegister', {
+        'id': alarm.id,
+        'name': alarm.place.name,
+        'address': alarm.place.address,
+        'latitude': alarm.place.latitude,
+        'longitude': alarm.place.longitude,
+        'radius': alarm.radius,
+        'vibration': alarm.vibration,
+        'sound': alarm.sound,
+        'startedAt': alarm.startedAt.millisecondsSinceEpoch,
+        'alertAt': alarm.alertAt?.millisecondsSinceEpoch,
+        'repeatDays': alarm.repeatDays,
+        'leadMinutes': alarm.leadMinutes,
+        'repeatStartDay': alarm.repeatStartDay?.millisecondsSinceEpoch,
+      });
+
+  Future<void> multiEnsure() => _channel.invokeMethod<void>('multiEnsure');
+  Future<void> multiFinish(String id, String status) =>
+      _channel.invokeMethod<void>('multiFinish', {'id': id, 'status': status});
+  Future<void> multiForget(String id) =>
+      _channel.invokeMethod<void>('multiForget', {'id': id});
+  Future<void> multiDismiss(String id) =>
+      _channel.invokeMethod<void>('multiDismiss', {'id': id});
+  Future<void> multiSnooze(String id, int minutes) => _channel
+      .invokeMethod<void>('multiSnooze', {'id': id, 'minutes': minutes});
+  Future<void> multiTrigger(String id) =>
+      _channel.invokeMethod<void>('multiTrigger', {'id': id});
+
   Future<void> register(DestinationAlarm alarm) =>
       _channel.invokeMethod<void>('register', {
         'id': alarm.id,

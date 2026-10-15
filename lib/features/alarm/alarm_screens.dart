@@ -7,6 +7,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/place.dart';
+import '../../models/repeat_schedule.dart';
+import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../services/geofence_service.dart';
 import '../home/home_screen.dart';
@@ -23,8 +25,9 @@ String _formatDateTime(BuildContext context, DateTime value) =>
     '${MaterialLocalizations.of(context).formatMediumDate(value)} at ${TimeOfDay.fromDateTime(value).format(context)}';
 
 class AlarmSetupScreen extends ConsumerStatefulWidget {
-  const AlarmSetupScreen({super.key, required this.place});
+  const AlarmSetupScreen({super.key, required this.place, required this.mode});
   final Place place;
+  final TravelMode mode;
   @override
   ConsumerState<AlarmSetupScreen> createState() => _AlarmSetupScreenState();
 }
@@ -42,6 +45,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   String? radiusError;
   DateTime? targetTime;
   int leadMinutes = 0;
+  int repeatDays = 0;
   late bool vibration;
   late String sound;
   @override
@@ -49,7 +53,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final settings = ref.read(settingsProvider);
-    radius = settings.defaultRadius.clamp(100, 2000).toDouble();
+    radius = widget.mode.defaultAlertRadius;
     radiusController = TextEditingController(text: radius.toInt().toString());
     vibration = settings.vibration;
     sound = settings.sound;
@@ -229,9 +233,23 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
 
   @override
   Widget build(BuildContext context) {
-    final actualAlertAt = targetTime?.subtract(Duration(minutes: leadMinutes));
+    final now = DateTime.now();
+    final nextTarget =
+        targetTime == null
+            ? null
+            : repeatDays == 0
+            ? targetTime
+            : nextRepeatTarget(targetTime!, repeatDays, leadMinutes, now);
+    final actualAlertAt = nextTarget?.subtract(Duration(minutes: leadMinutes));
+    final repeatStartDay =
+        repeatDays == 0
+            ? null
+            : nextTarget == null
+            ? nextRepeatDay(repeatDays, now)
+            : DateTime(nextTarget.year, nextTarget.month, nextTarget.day);
     final invalidTime =
-        actualAlertAt != null && !actualAlertAt.isAfter(DateTime.now());
+        targetTime != null &&
+        (actualAlertAt == null || !actualAlertAt.isAfter(now));
     final position = ref.watch(locationProvider).position;
     final alarm = ref.watch(alarmProvider);
     final distance = distanceTo(position, widget.place);
@@ -368,7 +386,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
             subtitle: Text(
               targetTime == null
                   ? 'Distance only'
-                  : 'Ring ${_formatDateTime(context, actualAlertAt!)}',
+                  : actualAlertAt == null
+                  ? 'Select a future date and time'
+                  : '${repeatDays == 0 ? 'Ring' : 'Next ring'} ${_formatDateTime(context, actualAlertAt)}',
             ),
             trailing:
                 targetTime == null
@@ -376,11 +396,67 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                     : IconButton(
                       tooltip: 'Remove time',
                       icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => targetTime = null),
+                      onPressed:
+                          () => setState(() {
+                            targetTime = null;
+                            leadMinutes = 0;
+                          }),
                     ),
             onTap: _pickAlertDateTime,
           ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 8),
+            leading: const Icon(Icons.repeat),
+            title: const Text('Repeat'),
+            subtitle: Text(
+              repeatDays == 0 ? 'Off' : repeatDaysLabel(repeatDays),
+            ),
+            children: [
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Select the days this alarm should repeat'),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Wrap(
+                  spacing: 8,
+                  children: List.generate(7, (index) {
+                    const labels = [
+                      'Mon',
+                      'Tue',
+                      'Wed',
+                      'Thu',
+                      'Fri',
+                      'Sat',
+                      'Sun',
+                    ];
+                    final bit = 1 << index;
+                    return FilterChip(
+                      label: Text(labels[index]),
+                      selected: (repeatDays & bit) != 0,
+                      onSelected:
+                          (selected) => setState(() {
+                            repeatDays =
+                                selected ? repeatDays | bit : repeatDays & ~bit;
+                          }),
+                    );
+                  }),
+                ),
+              ),
+              if (repeatDays != 0)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    targetTime == null
+                        ? 'The distance alert resets on each selected day.'
+                        : 'The time and distance alerts reset on each selected day.',
+                  ),
+                ),
+            ],
+          ),
           if (targetTime != null) ...[
+            const SizedBox(height: 8),
             const Text('Ring before the chosen time'),
             Wrap(
               spacing: 8,
@@ -583,9 +659,15 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
               ),
             ),
           const SizedBox(height: 16),
+          if (alarm.alarms.length >= 10)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Text('Maximum 10 active alarms. End one to add another.'),
+            ),
           FilledButton.icon(
             onPressed:
                 alarm.busy ||
+                        alarm.alarms.length >= 10 ||
                         radiusError != null ||
                         invalidTime ||
                         checkingRequirements ||
@@ -593,9 +675,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                     ? null
                     : () async {
                       try {
-                        final alertAt = targetTime?.subtract(
-                          Duration(minutes: leadMinutes),
-                        );
+                        final alertAt = actualAlertAt;
                         if (alertAt != null &&
                             !alertAt.isAfter(DateTime.now())) {
                           throw StateError('Choose a future alert time.');
@@ -608,6 +688,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                               vibration,
                               sound,
                               alertAt,
+                              repeatDays,
+                              leadMinutes,
+                              repeatStartDay,
                             );
                         if (context.mounted) {
                           context.go(
@@ -633,6 +716,8 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
             label: Text(
               alarm.busy
                   ? 'Starting…'
+                  : alarm.alarms.length >= 10
+                  ? 'Maximum 10 alarms active'
                   : requirements?.ready == true
                   ? 'Start alarm'
                   : 'Complete required settings to start',
@@ -780,7 +865,21 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
             ? 'Good'
             : 'Weak';
     return Scaffold(
-      appBar: AppBar(title: const Text('Alarm active')),
+      appBar: AppBar(
+        title: const Text('Alarm active'),
+        actions: [
+          IconButton(
+            tooltip: 'All alarms',
+            onPressed: () => context.go('/'),
+            icon: const Icon(Icons.list),
+          ),
+          IconButton(
+            tooltip: 'Add alarm',
+            onPressed: () => context.push('/pick'),
+            icon: const Icon(Icons.add),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -864,7 +963,11 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                   leading: const Icon(Icons.radio_button_checked),
                   title: const Text('Alert radius'),
                   subtitle: Text(
-                    '${formatDistance(alarm.radius)} · ${alarmState.distanceFired ? 'Rang' : 'Waiting'}',
+                    '${formatDistance(alarm.radius)} · ${alarmState.distanceFired
+                        ? 'Rang'
+                        : alarmState.selected?.distanceReady == false
+                        ? 'Waiting for repeat day'
+                        : 'Waiting'}',
                   ),
                 ),
                 if (alarm.alertAt != null)
@@ -875,13 +978,22 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                       '${_formatDateTime(context, alarm.alertAt!)} · ${alarmState.timeFired ? 'Rang' : 'Waiting'}',
                     ),
                   ),
+                if (alarm.repeatDays != 0)
+                  ListTile(
+                    leading: const Icon(Icons.repeat),
+                    title: const Text('Repeats'),
+                    subtitle: Text(repeatDaysLabel(alarm.repeatDays)),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.shield_outlined),
                   title: const Text('Background monitoring'),
                   subtitle: Text(
                     alarmState.status == 'snoozed'
                         ? 'Snoozed'
-                        : 'GPS monitoring and geofence active',
+                        : alarm.repeatDays != 0 &&
+                            alarmState.selected?.distanceReady == false
+                        ? 'Next selected day scheduled; GPS checks less often until then'
+                        : 'GPS monitoring active; geofence backup where available',
                   ),
                 ),
               ],
@@ -893,6 +1005,12 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           const SizedBox(height: 20),
+          FilledButton.tonalIcon(
+            onPressed: () => context.push('/setup', extra: alarm.place),
+            icon: const Icon(Icons.add_alert_outlined),
+            label: const Text('Add another alarm for this destination'),
+          ),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed:
                 alarmState.busy
@@ -902,7 +1020,11 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                         context: context,
                         builder:
                             (context) => AlertDialog(
-                              title: const Text('End this trip?'),
+                              title: Text(
+                                alarm.repeatDays == 0
+                                    ? 'End this trip?'
+                                    : 'Stop this repeating alarm?',
+                              ),
                               content: Text(alarm.place.name),
                               actions: [
                                 TextButton(
@@ -912,15 +1034,28 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                                 ),
                                 FilledButton(
                                   onPressed: () => Navigator.pop(context, true),
-                                  child: const Text('End trip'),
+                                  child: Text(
+                                    alarm.repeatDays == 0
+                                        ? 'End trip'
+                                        : 'Stop alarm',
+                                  ),
                                 ),
                               ],
                             ),
                       );
                       if (confirmed == true) {
                         try {
-                          await ref.read(alarmProvider).cancel();
-                          if (context.mounted) context.go('/');
+                          await ref.read(alarmProvider).cancel(alarm.id);
+                          if (context.mounted) {
+                            final current = ref.read(alarmProvider);
+                            context.go(
+                              current.hasTriggered
+                                  ? '/triggered'
+                                  : current.active == null
+                                  ? '/'
+                                  : '/active',
+                            );
+                          }
                         } catch (_) {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -935,7 +1070,9 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                       }
                     },
             icon: const Icon(Icons.cancel_outlined),
-            label: const Text('End trip'),
+            label: Text(
+              alarm.repeatDays == 0 ? 'End trip' : 'Stop repeating alarm',
+            ),
           ),
         ],
       ),
@@ -949,6 +1086,14 @@ class AlarmTriggeredScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final alarmState = ref.watch(alarmProvider);
     final alarm = alarmState.active;
+    final waitingAlerts =
+        alarmState.alarms
+            .where(
+              (entry) =>
+                  entry.status == 'triggered' && entry.alarm.id != alarm?.id,
+            )
+            .toList()
+          ..sort((a, b) => a.triggeredAt.compareTo(b.triggeredAt));
     if (alarm == null) {
       return Scaffold(
         body: Center(
@@ -994,6 +1139,14 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                   'The selected time and distance have both been reached.',
                 _ => 'You have reached the selected distance.',
               }, textAlign: TextAlign.center),
+              if (waitingAlerts.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Next: ${waitingAlerts.first.alarm.place.name}'
+                  '${waitingAlerts.length > 1 ? ' (+${waitingAlerts.length - 1} more)' : ''}',
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const Spacer(),
               FilledButton.icon(
                 onPressed:
@@ -1001,10 +1154,15 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                         ? null
                         : () async {
                           try {
-                            await ref.read(alarmProvider).dismissCurrent();
+                            await ref
+                                .read(alarmProvider)
+                                .dismissCurrent(alarm.id);
                             if (context.mounted) {
+                              final current = ref.read(alarmProvider);
                               context.go(
-                                ref.read(alarmProvider).active == null
+                                current.hasTriggered
+                                    ? '/triggered'
+                                    : current.active == null
                                     ? '/'
                                     : '/active',
                               );
@@ -1035,9 +1193,13 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                                       try {
                                         await ref
                                             .read(alarmProvider)
-                                            .snooze(minutes);
+                                            .snooze(minutes, alarm.id);
                                         if (context.mounted) {
-                                          context.go('/active');
+                                          context.go(
+                                            ref.read(alarmProvider).hasTriggered
+                                                ? '/triggered'
+                                                : '/active',
+                                          );
                                         }
                                       } catch (_) {
                                         if (context.mounted) {
@@ -1072,9 +1234,15 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                             context: context,
                             builder:
                                 (dialogContext) => AlertDialog(
-                                  title: const Text('End trip?'),
-                                  content: const Text(
-                                    'This cancels both the time and distance alerts.',
+                                  title: Text(
+                                    alarm.repeatDays == 0
+                                        ? 'End trip?'
+                                        : 'Stop repeating alarm?',
+                                  ),
+                                  content: Text(
+                                    alarm.repeatDays == 0
+                                        ? 'This cancels both the time and distance alerts.'
+                                        : 'This cancels future repeats and the current alert.',
                                   ),
                                   actions: [
                                     TextButton(
@@ -1098,8 +1266,17 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                           );
                           if (confirmed != true) return;
                           try {
-                            await ref.read(alarmProvider).stop();
-                            if (context.mounted) context.go('/');
+                            await ref.read(alarmProvider).stop(alarm.id);
+                            if (context.mounted) {
+                              final current = ref.read(alarmProvider);
+                              context.go(
+                                current.hasTriggered
+                                    ? '/triggered'
+                                    : current.active == null
+                                    ? '/'
+                                    : '/active',
+                              );
+                            }
                           } catch (_) {}
                         },
                 icon: const Icon(Icons.cancel_outlined),
