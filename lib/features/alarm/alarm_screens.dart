@@ -944,20 +944,6 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                     ),
                   ),
                 ListTile(
-                  leading: const Icon(Icons.repeat),
-                  title: const Text('Repeat'),
-                  subtitle: Text(
-                    alarm.repeatDays == 0
-                        ? 'Off · tap to choose days'
-                        : repeatDaysLabel(alarm.repeatDays),
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap:
-                      alarmState.busy || alarmState.selected?.status != 'active'
-                          ? null
-                          : () => _editRepeat(alarm.id, alarm.repeatDays),
-                ),
-                ListTile(
                   leading: const Icon(Icons.shield_outlined),
                   title: const Text('Background monitoring'),
                   subtitle: Text(
@@ -978,6 +964,23 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           const SizedBox(height: 20),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.repeat),
+              title: const Text('Repeat alarm'),
+              subtitle: Text(
+                alarm.repeatDays == 0
+                    ? 'Off · choose days'
+                    : repeatDaysLabel(alarm.repeatDays),
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap:
+                  alarmState.busy || alarmState.selected?.status != 'active'
+                      ? null
+                      : () => _editRepeat(alarm.id, alarm.repeatDays),
+            ),
+          ),
+          const SizedBox(height: 12),
           FilledButton.tonalIcon(
             onPressed: () => context.push('/setup', extra: alarm.place),
             icon: const Icon(Icons.add_alert_outlined),
