@@ -26,7 +26,7 @@ class TransitStopsService {
         DateTime.now().difference(cached.$1) < const Duration(minutes: 10)) {
       return cached.$2;
     }
-    final radius = mode == TravelMode.railway ? 5000 : 2500;
+    final radius = mode == TravelMode.railway ? 5000 : 3000;
     final filter = switch (mode) {
       TravelMode.bus =>
         'nwr["highway"="bus_stop"](around:$radius,$latitude,$longitude);'
