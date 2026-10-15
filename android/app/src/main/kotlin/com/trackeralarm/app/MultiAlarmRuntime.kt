@@ -25,10 +25,10 @@ object MultiAlarmRuntime {
 
     data class Entry(
         val id: String,
-        var name: String,
-        var address: String,
-        var latitude: Double,
-        var longitude: Double,
+        val name: String,
+        val address: String,
+        val latitude: Double,
+        val longitude: Double,
         val radius: Float,
         val vibration: Boolean,
         val sound: String,
@@ -347,33 +347,6 @@ object MultiAlarmRuntime {
         removeGeofence(context, id)
         refresh(context)
         if (entry.distanceReady(System.currentTimeMillis()) && !entry.distanceFired) addGeofence(context, entry)
-        result.success(null)
-    }
-
-    @Synchronized fun updateDestination(context: Context, id: String, args: Map<String, Any>, result: MethodChannel.Result) {
-        val name = args["name"] as? String
-        val latitude = (args["latitude"] as? Number)?.toDouble()
-        val longitude = (args["longitude"] as? Number)?.toDouble()
-        if (name.isNullOrBlank() || latitude == null || longitude == null ||
-            !latitude.isFinite() || !longitude.isFinite() ||
-            latitude !in -90.0..90.0 || longitude !in -180.0..180.0) {
-            result.error("arguments", "Invalid destination", null); return
-        }
-        val entries = read(context)
-        val entry = entries.firstOrNull { it.id == id && it.status == "active" } ?: run {
-            result.error("state", "Alarm must be active to change destination", null); return
-        }
-        entry.name = name
-        entry.address = args["address"] as? String ?: ""
-        entry.latitude = latitude
-        entry.longitude = longitude
-        entry.distanceFired = false
-        if (!write(context, entries)) {
-            result.error("storage", "Could not save destination", null); return
-        }
-        removeGeofence(context, id)
-        refresh(context)
-        if (entry.distanceReady(System.currentTimeMillis())) addGeofence(context, entry)
         result.success(null)
     }
 

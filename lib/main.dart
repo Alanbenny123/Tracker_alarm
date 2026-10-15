@@ -42,11 +42,12 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
               initialQuery:
                   state.extra is String ? state.extra as String : null,
               initialMode:
-                  state.extra is TravelMode ? state.extra as TravelMode : null,
-              replaceAlarmId:
-                  state.extra is DestinationChangeArgs
-                      ? (state.extra as DestinationChangeArgs).alarmId
+                  state.extra is TravelMode
+                      ? state.extra as TravelMode
+                      : state.extra is DestinationReselectArgs
+                      ? (state.extra as DestinationReselectArgs).mode
                       : null,
+              returnSelection: state.extra is DestinationReselectArgs,
             ),
       ),
       GoRoute(

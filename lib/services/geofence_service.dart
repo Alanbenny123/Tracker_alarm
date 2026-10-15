@@ -1,7 +1,6 @@
 import 'package:flutter/services.dart';
 
 import '../models/destination_alarm.dart';
-import '../models/place.dart';
 
 class AlarmRequirements {
   const AlarmRequirements({
@@ -76,14 +75,6 @@ class GeofenceService {
   Future<void> multiEnsure() => _channel.invokeMethod<void>('multiEnsure');
   Future<void> multiUpdateRepeat(String id, int days) => _channel
       .invokeMethod<void>('multiUpdateRepeat', {'id': id, 'days': days});
-  Future<void> multiUpdateDestination(String id, Place place) =>
-      _channel.invokeMethod<void>('multiUpdateDestination', {
-        'id': id,
-        'name': place.name,
-        'address': place.address,
-        'latitude': place.latitude,
-        'longitude': place.longitude,
-      });
   Future<void> multiFinish(String id, String status) =>
       _channel.invokeMethod<void>('multiFinish', {'id': id, 'status': status});
   Future<void> multiForget(String id) =>

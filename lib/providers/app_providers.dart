@@ -482,21 +482,6 @@ class AlarmController extends ChangeNotifier {
     }
   }
 
-  Future<void> changeDestination(String id, Place place) async {
-    busy = true;
-    notifyListeners();
-    try {
-      await _geofence.multiUpdateDestination(id, place);
-      await _applyNativeStates(await _geofence.multiStates());
-    } catch (e) {
-      error = e.toString();
-      rethrow;
-    } finally {
-      busy = false;
-      notifyListeners();
-    }
-  }
-
   Future<void> _finish(String result, String? targetId) async {
     final id = targetId ?? active?.id;
     if (id == null || !_entries.any((entry) => entry.alarm.id == id)) return;

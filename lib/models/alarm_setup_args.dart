@@ -8,7 +8,7 @@ class AlarmSetupArgs {
   final TravelMode mode;
 }
 
-class DestinationChangeArgs {
-  const DestinationChangeArgs(this.alarmId);
-  final String alarmId;
+class DestinationReselectArgs {
+  const DestinationReselectArgs(this.mode);
+  final TravelMode mode;
 }

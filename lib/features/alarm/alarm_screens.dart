@@ -40,6 +40,8 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   String? requirementsError;
   int requirementsCheck = 0;
   bool batterySettingsOpened = false;
+  late Place selectedPlace;
+  late TravelMode selectedMode;
   late double radius;
   late final TextEditingController radiusController;
   String radiusUnit = 'm';
@@ -51,7 +53,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     final settings = ref.read(settingsProvider);
-    radius = widget.mode.defaultAlertRadius;
+    selectedPlace = widget.place;
+    selectedMode = widget.mode;
+    radius = selectedMode.defaultAlertRadius;
     radiusController = TextEditingController(text: radius.toInt().toString());
     vibration = settings.vibration;
     sound = settings.sound;
@@ -201,11 +205,26 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     if (unit != null && mounted) setRadiusUnit(unit);
   }
 
+  Future<void> _reselectDestination() async {
+    final selection = await context.push<AlarmSetupArgs>(
+      '/pick',
+      extra: DestinationReselectArgs(selectedMode),
+    );
+    if (!mounted || selection == null) return;
+    setState(() {
+      selectedPlace = selection.place;
+      selectedMode = selection.mode;
+      radius = selectedMode.defaultAlertRadius;
+      radiusController.text = _radiusInput(radius);
+      radiusError = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final position = ref.watch(locationProvider).position;
     final alarm = ref.watch(alarmProvider);
-    final distance = distanceTo(position, widget.place);
+    final distance = distanceTo(position, selectedPlace);
     final eta =
         distance != null && position != null && position.speed > 1
             ? Duration(seconds: (distance / position.speed).round())
@@ -215,8 +234,8 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
         .places
         .any(
           (p) =>
-              p.latitude == widget.place.latitude &&
-              p.longitude == widget.place.longitude,
+              p.latitude == selectedPlace.latitude &&
+              p.longitude == selectedPlace.longitude,
         );
     return Scaffold(
       appBar: AppBar(title: const Text('Destination alarm')),
@@ -229,19 +248,27 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
               borderRadius: BorderRadius.circular(20),
               child: MapView(
                 position: position,
-                destination: widget.place,
+                destination: selectedPlace,
                 radius: radius,
               ),
             ),
           ),
           const SizedBox(height: 14),
           Text(
-            widget.place.name,
+            selectedPlace.name,
             style: Theme.of(
               context,
             ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
-          Text(widget.place.address),
+          Text(selectedPlace.address),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _reselectDestination,
+              icon: const Icon(Icons.edit_location_alt_outlined),
+              label: const Text('Reselect destination'),
+            ),
+          ),
           const SizedBox(height: 12),
           Text(
             distance == null
@@ -258,11 +285,14 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                   saved
                       ? null
                       : () async {
-                        final name = await _askName(context, widget.place.name);
+                        final name = await _askName(
+                          context,
+                          selectedPlace.name,
+                        );
                         if (name != null && name.trim().isNotEmpty) {
                           await ref
                               .read(placesProvider)
-                              .add(widget.place, name);
+                              .add(selectedPlace, name);
                         }
                       },
               icon: Icon(saved ? Icons.bookmark : Icons.bookmark_add_outlined),
@@ -520,7 +550,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       try {
                         await ref
                             .read(alarmProvider)
-                            .start(widget.place, radius, vibration, sound);
+                            .start(selectedPlace, radius, vibration, sound);
                         if (context.mounted) {
                           context.go(
                             ref.read(alarmProvider).status == 'triggered'
@@ -922,18 +952,6 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           const SizedBox(height: 20),
-          OutlinedButton.icon(
-            onPressed:
-                alarmState.busy || alarmState.selected?.status != 'active'
-                    ? null
-                    : () => context.push(
-                      '/pick',
-                      extra: DestinationChangeArgs(alarm.id),
-                    ),
-            icon: const Icon(Icons.edit_location_alt_outlined),
-            label: const Text('Change destination'),
-          ),
-          const SizedBox(height: 12),
           FilledButton.tonalIcon(
             onPressed: () => context.push('/setup', extra: alarm.place),
             icon: const Icon(Icons.add_alert_outlined),

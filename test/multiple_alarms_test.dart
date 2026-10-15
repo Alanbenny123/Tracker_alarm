@@ -43,16 +43,6 @@ class FakeNative extends GeofenceService {
   }
 
   @override
-  Future<void> multiUpdateDestination(String id, Place place) async {
-    entry(id)
-      ..['name'] = place.name
-      ..['address'] = place.address
-      ..['latitude'] = place.latitude
-      ..['longitude'] = place.longitude
-      ..['distanceFired'] = false;
-  }
-
-  @override
   Future<void> multiRegister(DestinationAlarm alarm) async {
     states.add({
       'id': alarm.id,
@@ -398,29 +388,25 @@ void main() {
     expect(native.entry(alarm.id).containsKey('alertAt'), false);
   });
 
-  test(
-    'active alarm can change repeat days and destination without duplication',
-    () async {
-      final storage = MemoryStorage();
-      final native = FakeNative();
-      final controller = AlarmController(
-        storage,
-        native,
-        FakeLocation(),
-        HistoryController(storage),
-      );
-      await controller.restore();
-      await controller.start(stationA, 500, true, 'Bell');
-      final id = controller.active!.id;
+  test('active alarm can change repeat days without duplication', () async {
+    final storage = MemoryStorage();
+    final native = FakeNative();
+    final controller = AlarmController(
+      storage,
+      native,
+      FakeLocation(),
+      HistoryController(storage),
+    );
+    await controller.restore();
+    await controller.start(stationA, 500, true, 'Bell');
+    final id = controller.active!.id;
 
-      await controller.setRepeatDays(id, 5);
-      await controller.changeDestination(id, stationB);
+    await controller.setRepeatDays(id, 5);
 
-      expect(controller.alarms, hasLength(1));
-      expect(controller.active!.id, id);
-      expect(controller.active!.repeatDays, 5);
-      expect(controller.active!.place.name, stationB.name);
-      expect(controller.active!.radius, 500);
-    },
-  );
+    expect(controller.alarms, hasLength(1));
+    expect(controller.active!.id, id);
+    expect(controller.active!.repeatDays, 5);
+    expect(controller.active!.place.name, stationA.name);
+    expect(controller.active!.radius, 500);
+  });
 }

@@ -16,11 +16,11 @@ class DestinationPickerScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialQuery,
     this.initialMode,
-    this.replaceAlarmId,
+    this.returnSelection = false,
   });
   final String? initialQuery;
   final TravelMode? initialMode;
-  final String? replaceAlarmId;
+  final bool returnSelection;
   @override
   ConsumerState<DestinationPickerScreen> createState() =>
       _DestinationPickerScreenState();
@@ -438,42 +438,18 @@ class _DestinationPickerScreenState
                       ),
                       const SizedBox(height: 12),
                       FilledButton(
-                        onPressed: () async {
-                          if (widget.replaceAlarmId == null) {
-                            context.push(
-                              '/setup',
-                              extra: AlarmSetupArgs(
-                                place: selected!,
-                                mode: mode,
-                              ),
-                            );
-                            return;
-                          }
-                          try {
-                            await ref
-                                .read(alarmProvider)
-                                .changeDestination(
-                                  widget.replaceAlarmId!,
-                                  selected!,
-                                );
-                            if (context.mounted) context.go('/active');
-                          } catch (_) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Could not change destination. Try again.',
-                                  ),
-                                ),
-                              );
-                            }
+                        onPressed: () {
+                          final selection = AlarmSetupArgs(
+                            place: selected!,
+                            mode: mode,
+                          );
+                          if (widget.returnSelection) {
+                            context.pop(selection);
+                          } else {
+                            context.push('/setup', extra: selection);
                           }
                         },
-                        child: Text(
-                          widget.replaceAlarmId == null
-                              ? 'Confirm destination'
-                              : 'Use this destination',
-                        ),
+                        child: const Text('Confirm destination'),
                       ),
                       const SizedBox(height: 4),
                       Text(
