@@ -69,6 +69,19 @@ class MainActivity : FlutterActivity() {
                     MultiAlarmRuntime.ensureGeofences(this)
                     result.success(null)
                 }
+                "multiUpdateRepeat" -> {
+                    val id = call.argument<String>("id")
+                    val days = call.argument<Int>("days")
+                    if (id == null || days == null) result.error("arguments", "Missing repeat settings", null)
+                    else MultiAlarmRuntime.updateRepeat(this, id, days, result)
+                }
+                "multiUpdateDestination" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments as? Map<String, Any>
+                    val id = args?.get("id") as? String
+                    if (id == null || args == null) result.error("arguments", "Missing destination", null)
+                    else MultiAlarmRuntime.updateDestination(this, id, args, result)
+                }
                 "multiFinish", "multiForget", "multiDismiss", "multiSnooze", "multiTrigger" -> {
                     val id = call.argument<String>("id")
                     if (id.isNullOrBlank()) {

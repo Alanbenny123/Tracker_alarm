@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/place.dart';
+import '../../models/alarm_setup_args.dart';
 import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
@@ -43,9 +44,6 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   late final TextEditingController radiusController;
   String radiusUnit = 'm';
   String? radiusError;
-  DateTime? targetTime;
-  int leadMinutes = 0;
-  int repeatDays = 0;
   late bool vibration;
   late String sound;
   @override
@@ -136,34 +134,6 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     await _refreshRequirements();
   }
 
-  Future<void> _pickAlertDateTime() async {
-    final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: targetTime ?? now,
-      firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: DateTime(now.year + 2),
-    );
-    if (date == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime:
-          targetTime == null
-              ? TimeOfDay.now()
-              : TimeOfDay.fromDateTime(targetTime!),
-    );
-    if (time == null || !mounted) return;
-    setState(() {
-      targetTime = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-      );
-    });
-  }
-
   void setRadius(double value) {
     setState(() {
       radius = value;
@@ -233,23 +203,6 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final nextTarget =
-        targetTime == null
-            ? null
-            : repeatDays == 0
-            ? targetTime
-            : nextRepeatTarget(targetTime!, repeatDays, leadMinutes, now);
-    final actualAlertAt = nextTarget?.subtract(Duration(minutes: leadMinutes));
-    final repeatStartDay =
-        repeatDays == 0
-            ? null
-            : nextTarget == null
-            ? nextRepeatDay(repeatDays, now)
-            : DateTime(nextTarget.year, nextTarget.month, nextTarget.day);
-    final invalidTime =
-        targetTime != null &&
-        (actualAlertAt == null || !actualAlertAt.isAfter(now));
     final position = ref.watch(locationProvider).position;
     final alarm = ref.watch(alarmProvider);
     final distance = distanceTo(position, widget.place);
@@ -379,116 +332,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           const SizedBox(height: 8),
           Center(child: Text('${radius.toInt()} m radius')),
           const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.schedule),
-            title: const Text('Date and time alarm (optional)'),
-            subtitle: Text(
-              targetTime == null
-                  ? 'Distance only'
-                  : actualAlertAt == null
-                  ? 'Select a future date and time'
-                  : '${repeatDays == 0 ? 'Ring' : 'Next ring'} ${_formatDateTime(context, actualAlertAt)}',
-            ),
-            trailing:
-                targetTime == null
-                    ? const Icon(Icons.chevron_right)
-                    : IconButton(
-                      tooltip: 'Remove time',
-                      icon: const Icon(Icons.close),
-                      onPressed:
-                          () => setState(() {
-                            targetTime = null;
-                            leadMinutes = 0;
-                          }),
-                    ),
-            onTap: _pickAlertDateTime,
-          ),
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(bottom: 8),
-            leading: const Icon(Icons.repeat),
-            title: const Text('Repeat'),
-            subtitle: Text(
-              repeatDays == 0 ? 'Off' : repeatDaysLabel(repeatDays),
-            ),
-            children: [
-              const Align(
-                alignment: Alignment.centerLeft,
-                child: Text('Select the days this alarm should repeat'),
-              ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 8,
-                  children: List.generate(7, (index) {
-                    const labels = [
-                      'Mon',
-                      'Tue',
-                      'Wed',
-                      'Thu',
-                      'Fri',
-                      'Sat',
-                      'Sun',
-                    ];
-                    final bit = 1 << index;
-                    return FilterChip(
-                      label: Text(labels[index]),
-                      selected: (repeatDays & bit) != 0,
-                      onSelected:
-                          (selected) => setState(() {
-                            repeatDays =
-                                selected ? repeatDays | bit : repeatDays & ~bit;
-                          }),
-                    );
-                  }),
-                ),
-              ),
-              if (repeatDays != 0)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    targetTime == null
-                        ? 'The distance alert resets on each selected day.'
-                        : 'The time and distance alerts reset on each selected day.',
-                  ),
-                ),
-            ],
-          ),
-          if (targetTime != null) ...[
-            const SizedBox(height: 8),
-            const Text('Ring before the chosen time'),
-            Wrap(
-              spacing: 8,
-              children:
-                  [0, 5, 15, 30, 60]
-                      .map(
-                        (minutes) => ChoiceChip(
-                          label: Text(
-                            minutes == 0
-                                ? 'At that time'
-                                : '$minutes min before',
-                          ),
-                          selected: leadMinutes == minutes,
-                          onSelected:
-                              (_) => setState(() => leadMinutes = minutes),
-                        ),
-                      )
-                      .toList(),
-            ),
-            if (invalidTime)
-              Text(
-                'Choose a future alert time.',
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-          ],
-          if (targetTime != null)
-            const Text(
-              'The time alert may be delayed by Android battery restrictions.',
-            ),
-          const Text(
-            'Time and distance alerts ring separately. Whichever happens first rings first.',
-          ),
+          const Text('You can choose repeat days after starting the alarm.'),
           const SizedBox(height: 10),
           ListTile(
             contentPadding: EdgeInsets.zero,
@@ -669,29 +513,14 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                 alarm.busy ||
                         alarm.alarms.length >= 10 ||
                         radiusError != null ||
-                        invalidTime ||
                         checkingRequirements ||
                         requirements?.ready != true
                     ? null
                     : () async {
                       try {
-                        final alertAt = actualAlertAt;
-                        if (alertAt != null &&
-                            !alertAt.isAfter(DateTime.now())) {
-                          throw StateError('Choose a future alert time.');
-                        }
                         await ref
                             .read(alarmProvider)
-                            .start(
-                              widget.place,
-                              radius,
-                              vibration,
-                              sound,
-                              alertAt,
-                              repeatDays,
-                              leadMinutes,
-                              repeatStartDay,
-                            );
+                            .start(widget.place, radius, vibration, sound);
                         if (context.mounted) {
                           context.go(
                             ref.read(alarmProvider).status == 'triggered'
@@ -784,6 +613,86 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
     with WidgetsBindingObserver {
   Timer? timer;
   bool showMap = false;
+
+  Future<void> _editRepeat(String id, int currentDays) async {
+    var selectedDays = currentDays;
+    final days = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (sheetContext, setSheetState) => SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Repeat on selected days',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          children: List.generate(7, (index) {
+                            const labels = [
+                              'Mon',
+                              'Tue',
+                              'Wed',
+                              'Thu',
+                              'Fri',
+                              'Sat',
+                              'Sun',
+                            ];
+                            final bit = 1 << index;
+                            return FilterChip(
+                              label: Text(labels[index]),
+                              selected: (selectedDays & bit) != 0,
+                              onSelected:
+                                  (selected) => setSheetState(() {
+                                    selectedDays =
+                                        selected
+                                            ? selectedDays | bit
+                                            : selectedDays & ~bit;
+                                  }),
+                            );
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Leave all days unselected to turn repeat off.',
+                        ),
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton(
+                            onPressed:
+                                () => Navigator.pop(sheetContext, selectedDays),
+                            child: const Text('Save'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ),
+    );
+    if (days == null || days == currentDays || !mounted) return;
+    try {
+      await ref.read(alarmProvider).setRepeatDays(id, days);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not update repeat days. Try again.'),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -978,12 +887,20 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                       '${_formatDateTime(context, alarm.alertAt!)} · ${alarmState.timeFired ? 'Rang' : 'Waiting'}',
                     ),
                   ),
-                if (alarm.repeatDays != 0)
-                  ListTile(
-                    leading: const Icon(Icons.repeat),
-                    title: const Text('Repeats'),
-                    subtitle: Text(repeatDaysLabel(alarm.repeatDays)),
+                ListTile(
+                  leading: const Icon(Icons.repeat),
+                  title: const Text('Repeat'),
+                  subtitle: Text(
+                    alarm.repeatDays == 0
+                        ? 'Off · tap to choose days'
+                        : repeatDaysLabel(alarm.repeatDays),
                   ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap:
+                      alarmState.busy || alarmState.selected?.status != 'active'
+                          ? null
+                          : () => _editRepeat(alarm.id, alarm.repeatDays),
+                ),
                 ListTile(
                   leading: const Icon(Icons.shield_outlined),
                   title: const Text('Background monitoring'),
@@ -1005,6 +922,18 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
               style: TextStyle(color: Theme.of(context).colorScheme.error),
             ),
           const SizedBox(height: 20),
+          OutlinedButton.icon(
+            onPressed:
+                alarmState.busy || alarmState.selected?.status != 'active'
+                    ? null
+                    : () => context.push(
+                      '/pick',
+                      extra: DestinationChangeArgs(alarm.id),
+                    ),
+            icon: const Icon(Icons.edit_location_alt_outlined),
+            label: const Text('Change destination'),
+          ),
+          const SizedBox(height: 12),
           FilledButton.tonalIcon(
             onPressed: () => context.push('/setup', extra: alarm.place),
             icon: const Icon(Icons.add_alert_outlined),

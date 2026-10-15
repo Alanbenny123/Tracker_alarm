@@ -25,10 +25,10 @@ object MultiAlarmRuntime {
 
     data class Entry(
         val id: String,
-        val name: String,
-        val address: String,
-        val latitude: Double,
-        val longitude: Double,
+        var name: String,
+        var address: String,
+        var latitude: Double,
+        var longitude: Double,
         val radius: Float,
         val vibration: Boolean,
         val sound: String,
@@ -40,7 +40,7 @@ object MultiAlarmRuntime {
         var triggerReason: String = "distance",
         var snoozedUntil: Long = 0L,
         var triggeredAt: Long = 0L,
-        val repeatDays: Int = 0,
+        var repeatDays: Int = 0,
         val leadMinutes: Int = 0,
         val targetMinute: Int = 0,
         var cycleDay: Long = 0L,
@@ -300,6 +300,81 @@ object MultiAlarmRuntime {
     @Synchronized fun forget(context: Context, id: String) {
         val entries = read(context)
         if (entries.removeAll { it.id == id && !it.live() }) write(context, entries)
+    }
+
+    @Synchronized fun updateRepeat(context: Context, id: String, days: Int, result: MethodChannel.Result) {
+        if (days !in 0..127) {
+            result.error("arguments", "Choose valid repeat days", null); return
+        }
+        val entries = read(context)
+        val entry = entries.firstOrNull { it.id == id && it.status == "active" } ?: run {
+            result.error("state", "Alarm must be active to edit repeat days", null); return
+        }
+        if (days == entry.repeatDays) { result.success(null); return }
+        if (days == 0) {
+            entry.repeatDays = 0
+            entry.cycleDay = 0L
+            entry.cycleDate = 0
+        } else {
+            val now = System.currentTimeMillis()
+            val day = Calendar.getInstance().apply { timeInMillis = dayStart(now) }
+            var nextAlert = 0L
+            while (true) {
+                val weekday = (day.get(Calendar.DAY_OF_WEEK) + 5) % 7
+                if ((days and (1 shl weekday)) != 0) {
+                    val candidate = Calendar.getInstance().apply {
+                        timeInMillis = day.timeInMillis
+                        set(Calendar.HOUR_OF_DAY, entry.targetMinute / 60)
+                        set(Calendar.MINUTE, entry.targetMinute % 60)
+                    }.timeInMillis - entry.leadMinutes * 60_000L
+                    if (!entry.hasTime || candidate > now) {
+                        nextAlert = if (entry.hasTime) candidate else 0L
+                        break
+                    }
+                }
+                day.add(Calendar.DAY_OF_MONTH, 1)
+            }
+            entry.repeatDays = days
+            entry.cycleDay = day.timeInMillis
+            entry.cycleDate = dateNumber(day)
+            entry.alertAt = nextAlert
+            entry.timeFired = false
+            entry.distanceFired = false
+        }
+        if (!write(context, entries)) {
+            result.error("storage", "Could not save repeat days", null); return
+        }
+        removeGeofence(context, id)
+        refresh(context)
+        if (entry.distanceReady(System.currentTimeMillis()) && !entry.distanceFired) addGeofence(context, entry)
+        result.success(null)
+    }
+
+    @Synchronized fun updateDestination(context: Context, id: String, args: Map<String, Any>, result: MethodChannel.Result) {
+        val name = args["name"] as? String
+        val latitude = (args["latitude"] as? Number)?.toDouble()
+        val longitude = (args["longitude"] as? Number)?.toDouble()
+        if (name.isNullOrBlank() || latitude == null || longitude == null ||
+            !latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0) {
+            result.error("arguments", "Invalid destination", null); return
+        }
+        val entries = read(context)
+        val entry = entries.firstOrNull { it.id == id && it.status == "active" } ?: run {
+            result.error("state", "Alarm must be active to change destination", null); return
+        }
+        entry.name = name
+        entry.address = args["address"] as? String ?: ""
+        entry.latitude = latitude
+        entry.longitude = longitude
+        entry.distanceFired = false
+        if (!write(context, entries)) {
+            result.error("storage", "Could not save destination", null); return
+        }
+        removeGeofence(context, id)
+        refresh(context)
+        if (entry.distanceReady(System.currentTimeMillis())) addGeofence(context, entry)
+        result.success(null)
     }
 
     @Synchronized fun trigger(context: Context, id: String, reason: String) {

@@ -16,9 +16,11 @@ class DestinationPickerScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialQuery,
     this.initialMode,
+    this.replaceAlarmId,
   });
   final String? initialQuery;
   final TravelMode? initialMode;
+  final String? replaceAlarmId;
   @override
   ConsumerState<DestinationPickerScreen> createState() =>
       _DestinationPickerScreenState();
@@ -436,15 +438,42 @@ class _DestinationPickerScreenState
                       ),
                       const SizedBox(height: 12),
                       FilledButton(
-                        onPressed:
-                            () => context.push(
+                        onPressed: () async {
+                          if (widget.replaceAlarmId == null) {
+                            context.push(
                               '/setup',
                               extra: AlarmSetupArgs(
                                 place: selected!,
                                 mode: mode,
                               ),
-                            ),
-                        child: const Text('Confirm destination'),
+                            );
+                            return;
+                          }
+                          try {
+                            await ref
+                                .read(alarmProvider)
+                                .changeDestination(
+                                  widget.replaceAlarmId!,
+                                  selected!,
+                                );
+                            if (context.mounted) context.go('/active');
+                          } catch (_) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Could not change destination. Try again.',
+                                  ),
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        child: Text(
+                          widget.replaceAlarmId == null
+                              ? 'Confirm destination'
+                              : 'Use this destination',
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
