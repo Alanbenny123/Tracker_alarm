@@ -40,6 +40,8 @@ class FakeNative extends GeofenceService {
   Future<List<Map<String, dynamic>>> multiStates() async =>
       states.map((state) => Map<String, dynamic>.from(state)).toList();
   @override
+  Future<String?> storageWarning() async => null;
+  @override
   Future<void> multiEnsure() async => ensureCalls++;
   @override
   Future<void> multiForget(String id) async {

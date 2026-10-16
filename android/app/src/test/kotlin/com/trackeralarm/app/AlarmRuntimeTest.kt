@@ -4,6 +4,14 @@ import android.Manifest
 import android.app.AlarmManager
 import android.app.Application
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.media.AudioManager
+import android.content.pm.ApplicationInfo
+import android.provider.Settings
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
+import org.xmlpull.v1.XmlPullParser
 import android.media.MediaPlayer
 import android.os.VibratorManager
 import org.robolectric.shadows.ShadowAlarmManager
@@ -162,6 +170,97 @@ class AlarmRuntimeTest {
         assertTrue(shadowOf(vibrator).isVibrating)
         sound.stop()
         assertFalse(shadowOf(vibrator).isVibrating)
+    }
+
+    @Test fun readinessDetectsBlockedAlarmAndTrackingChannels() {
+        val manager = AlarmRuntime.notifications(app)
+        assertTrue(AlarmReadiness.notificationsReady(app))
+        manager.createNotificationChannel(NotificationChannel(AlarmRuntime.CHANNEL_ALARM, "Alarms", NotificationManager.IMPORTANCE_NONE))
+        assertFalse(AlarmReadiness.notificationsReady(app))
+        val settings = AlarmReadiness.notificationSettings(app)
+        assertEquals(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, settings.action)
+        assertEquals(AlarmRuntime.CHANNEL_ALARM, settings.getStringExtra(Settings.EXTRA_CHANNEL_ID))
+    }
+
+    @Test fun readinessChecksTrackingChannelAndWarnsAboutMutedAudio() {
+        val manager = AlarmRuntime.notifications(app)
+        manager.createNotificationChannel(NotificationChannel(AlarmRuntime.CHANNEL_TRACKING, "Tracking", NotificationManager.IMPORTANCE_NONE))
+        assertEquals(AlarmRuntime.CHANNEL_TRACKING, AlarmReadiness.blockedChannel(app))
+        val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audio.setStreamVolume(AudioManager.STREAM_ALARM, 0, 0)
+        val values = AlarmReadiness.values(app, false)
+        assertEquals(false, values["notifications"])
+        assertEquals(manager.canUseFullScreenIntent(), values["fullScreenAlarms"])
+        assertTrue((values["warnings"] as List<*>).any { it.toString().contains("volume is zero") })
+    }
+
+    @Test fun batteryConfirmationExpiresAndIsInvalidatedOnLeavingTheApp() {
+        val confirmation = BatteryConfirmation()
+        assertFalse(confirmation.valid())
+        confirmation.confirm()
+        assertTrue(confirmation.valid())
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(16))
+        assertFalse(confirmation.valid())
+        confirmation.confirm()
+        confirmation.invalidate()
+        assertFalse(confirmation.valid())
+        assertFalse(BatteryConfirmation().valid())
+    }
+
+    @Test fun damagedNativeEntryDoesNotEraseOtherDestinations() {
+        val valid = entry("kept").json()
+        val invalid = entry("invalid").json().put("latitude", 100.0)
+        val raw = JSONArray().put(valid).put(invalid).put("broken").toString()
+        app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE).edit().putString("alarms", raw).commit()
+        assertEquals(listOf("kept"), MultiAlarmRuntime.live(app).map { it.id })
+        val stored = app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE)
+        assertEquals(raw, stored.getString("recovery_alarms", null))
+        assertNotNull(MultiAlarmRuntime.storageWarning(app))
+        assertEquals(1, JSONArray(stored.getString("alarms", "[]")).length())
+    }
+
+    @Test fun corruptNativeJsonRestoresTheLastGoodSnapshotAndRecoveryCanBeDeleted() {
+        save(entry("kept"))
+        MultiAlarmRuntime.live(app)
+        val stored = app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE)
+        stored.edit().putString("alarms", "broken JSON").commit()
+        assertEquals("kept", MultiAlarmRuntime.live(app).single().id)
+        assertNotNull(MultiAlarmRuntime.storageWarning(app))
+        assertTrue(MultiAlarmRuntime.clearStorageRecovery(app))
+        assertNull(stored.getString("recovery_alarms", null))
+        assertNull(MultiAlarmRuntime.storageWarning(app))
+        assertEquals("kept", MultiAlarmRuntime.live(app).single().id)
+    }
+
+    @Test fun clearingFinishedNativeRecordsPreservesAllActiveDestinations() {
+        save(entry("live"), entry("ringing").apply { status = "triggered" },
+            entry("done").apply { status = "completed" })
+        assertTrue(MultiAlarmRuntime.clearFinished(app))
+        assertEquals(setOf("live", "ringing"), MultiAlarmRuntime.live(app).map { it.id }.toSet())
+        val stored = app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE)
+        assertFalse(stored.getString("last_good_alarms", "")!!.contains("done"))
+    }
+
+    @Test fun sensitiveDataIsExcludedFromCloudBackupAndDeviceTransfer() {
+        assertEquals(0, app.applicationInfo.flags and ApplicationInfo.FLAG_ALLOW_BACKUP)
+        val expected = setOf("root", "file", "database", "sharedpref", "external",
+            "device_root", "device_file", "device_database", "device_sharedpref")
+        val parser = app.resources.getXml(R.xml.data_extraction_rules)
+        val domains = mutableMapOf<String, MutableSet<String>>()
+        var section = ""
+        while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+            if (parser.eventType == XmlPullParser.START_TAG) {
+                if (parser.name == "cloud-backup" || parser.name == "device-transfer") section = parser.name
+                if (parser.name == "exclude") {
+                    assertEquals(".", parser.getAttributeValue(null, "path"))
+                    domains.getOrPut(section) { mutableSetOf() }.add(parser.getAttributeValue(null, "domain"))
+                }
+            }
+            parser.next()
+        }
+        parser.close()
+        assertEquals(expected, domains["cloud-backup"])
+        assertEquals(expected, domains["device-transfer"])
     }
 
     @Test fun lockScreenActivityHasNoAppNavigationAndRejectsMissingAlarm() {

@@ -34,6 +34,12 @@ class MultiTrackingService : Service() {
             if (!AlarmScheduler.canScheduleExact(context)) return mapOf(
                 "monitoringMessage" to "Allow Alarms & reminders in app settings. Snooze and scheduled alerts may be delayed.",
                 "monitoringHealthy" to false, "gpsStatus" to "Check alarm permission")
+            if (!AlarmReadiness.notificationsReady(context)) return mapOf(
+                "monitoringMessage" to "Alarm or tracking notifications are blocked. Check notification settings.",
+                "monitoringHealthy" to false, "gpsStatus" to "Check notifications")
+            if (!AlarmReadiness.fullScreenReady(context)) return mapOf(
+                "monitoringMessage" to "Allow lock-screen alarms in Android settings.",
+                "monitoringHealthy" to false, "gpsStatus" to "Check lock-screen access")
             val distanceActive = MultiAlarmRuntime.live(context).any {
                 !it.distanceFired && it.distanceReady(System.currentTimeMillis())
             }

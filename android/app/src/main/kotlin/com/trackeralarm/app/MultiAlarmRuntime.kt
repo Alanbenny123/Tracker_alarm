@@ -108,18 +108,64 @@ object MultiAlarmRuntime {
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE)
-    private fun read(context: Context): MutableList<Entry> {
-        val raw = prefs(context).getString(KEY, "[]") ?: "[]"
-        return try {
-            val array = JSONArray(raw)
-            MutableList(array.length()) { Entry.from(array.getJSONObject(it)) }
-        } catch (_: Exception) { mutableListOf() }
+    private fun decode(raw: String): Pair<MutableList<Entry>, Boolean> {
+        val array = JSONArray(raw)
+        val entries = mutableListOf<Entry>()
+        val ids = mutableSetOf<String>()
+        var damaged = false
+        for (index in 0 until array.length()) {
+            try {
+                val entry = Entry.from(array.getJSONObject(index))
+                require(entry.id.isNotBlank() && entry.latitude.isFinite() && entry.longitude.isFinite() &&
+                    entry.latitude in -90.0..90.0 && entry.longitude in -180.0..180.0 &&
+                    entry.radius.isFinite() && entry.radius in 100f..2000f &&
+                    entry.status in listOf("active", "triggered", "snoozed", "completed", "cancelled") &&
+                    entry.startedAt > 0L && entry.alertAt >= 0L && entry.snoozedUntil >= 0L &&
+                    entry.targetMinute in 0..1439 && ids.add(entry.id))
+                entries.add(entry)
+            } catch (_: Exception) { damaged = true }
+        }
+        return entries to damaged
     }
-    private fun write(context: Context, entries: List<Entry>): Boolean {
+
+    @Synchronized private fun read(context: Context): MutableList<Entry> {
+        val stored = prefs(context)
+        val raw = stored.getString(KEY, "[]") ?: "[]"
+        var damaged = false
+        val decoded = try { decode(raw) } catch (_: Exception) {
+            damaged = true
+            try { decode(stored.getString("last_good_alarms", "[]") ?: "[]") }
+            catch (_: Exception) { mutableListOf<Entry>() to true }
+        }
+        damaged = damaged || decoded.second
+        val valid = JSONArray().apply { decoded.first.forEach { put(it.json()) } }.toString()
+        if (damaged) {
+            stored.edit().putString("recovery_alarms", raw)
+                .putString("storage_warning", "Alarm storage contained damaged data. ${decoded.first.size} alarms recovered. Check your active alarms and recreate any missing alarms.")
+                .putString(KEY, valid).putString("last_good_alarms", valid).commit()
+        } else if (stored.getString("last_good_alarms", null) != valid) {
+            stored.edit().putString("last_good_alarms", valid).commit()
+        }
+        return decoded.first
+    }
+
+    @Synchronized private fun write(context: Context, entries: List<Entry>): Boolean {
         val array = JSONArray()
         entries.forEach { array.put(it.json()) }
-        return prefs(context).edit().putString(KEY, array.toString()).commit()
+        return prefs(context).edit().putString(KEY, array.toString())
+            .putString("last_good_alarms", array.toString()).commit()
     }
+
+    @Synchronized fun storageWarning(context: Context): String? {
+        read(context)
+        return prefs(context).getString("storage_warning", null)
+    }
+
+    @Synchronized fun clearFinished(context: Context): Boolean =
+        write(context, read(context).filter { it.live() })
+
+    @Synchronized fun clearStorageRecovery(context: Context): Boolean =
+        prefs(context).edit().remove("recovery_alarms").remove("storage_warning").commit()
 
     @Synchronized fun states(context: Context): List<Map<String, Any>> {
         migrateLegacy(context)

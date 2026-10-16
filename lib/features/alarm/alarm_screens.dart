@@ -180,7 +180,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     await Permission.notification.request();
     if (!mounted) return;
     final next = await ref.read(geofenceProvider).requirements();
-    if (!next.notifications) await openAppSettings();
+    if (!next.notifications) {
+      await ref.read(geofenceProvider).openNotificationSettings();
+    }
     await _refreshRequirements();
   }
 
@@ -202,7 +204,19 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   }
 
   Future<void> _confirmBatterySettings() async {
-    await ref.read(geofenceProvider).confirmBatterySettings();
+    try {
+      await ref.read(geofenceProvider).confirmBatterySettings();
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => batterySettingsOpened = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Open battery settings again, then confirm No restrictions.',
+          ),
+        ),
+      );
+    }
     await _refreshRequirements();
   }
 
@@ -535,7 +549,8 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                     ),
                     _requirementTile(
                       title: 'Notifications',
-                      subtitle: 'Allow alarm notifications',
+                      subtitle:
+                          'Allow notifications and high-priority alarm alerts',
                       done: requirements!.notifications,
                       onTap: _enableNotifications,
                     ),
@@ -562,11 +577,38 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       },
                     ),
                     _requirementTile(
+                      title: 'Lock-screen alarms',
+                      subtitle: 'Allow alarms to open over the lock screen',
+                      done: requirements!.fullScreenAlarms,
+                      onTap: () async {
+                        try {
+                          await ref
+                              .read(geofenceProvider)
+                              .openFullScreenSettings();
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Open Android settings → Special app access → Full-screen notifications.',
+                              ),
+                            ),
+                          );
+                        }
+                        await _refreshRequirements();
+                      },
+                    ),
+                    for (final warning in requirements!.warnings)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(warning),
+                      ),
+                    _requirementTile(
                       title: 'Battery: Unrestricted',
                       subtitle:
                           requirements!.batteryManuallyConfirmed &&
                                   !requirements!.batteryOptimizationOff
-                              ? 'Confirmed by you for this phone'
+                              ? 'Confirmed for this foreground session (up to 15 minutes)'
                               : 'Choose Unrestricted / No restrictions',
                       done: requirements!.batteryReady,
                       onTap: _enableBattery,
@@ -594,7 +636,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       const Padding(
                         padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                         child: Text(
-                          'Use this confirmation only if your phone does not report its battery setting to Android.',
+                          'Use this confirmation only if your phone does not report its battery setting to Android. It expires after leaving the app or after 15 minutes.',
                         ),
                       ),
                   ],
@@ -1079,30 +1121,82 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
   }
 }
 
-class AlarmTriggeredScreen extends ConsumerWidget {
+class AlarmTriggeredScreen extends ConsumerStatefulWidget {
   const AlarmTriggeredScreen({super.key});
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final alarmState = ref.watch(alarmProvider);
-    final alarm = alarmState.active;
-    final waitingAlerts =
-        alarmState.alarms
-            .where(
-              (entry) =>
-                  entry.status == 'triggered' && entry.alarm.id != alarm?.id,
-            )
-            .toList()
-          ..sort((a, b) => a.triggeredAt.compareTo(b.triggeredAt));
-    if (alarm == null) {
-      return Scaffold(
-        body: Center(
-          child: FilledButton(
-            onPressed: () => context.go('/'),
-            child: const Text('Go home'),
-          ),
-        ),
-      );
+  ConsumerState<AlarmTriggeredScreen> createState() =>
+      _AlarmTriggeredScreenState();
+}
+
+class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen>
+    with WidgetsBindingObserver {
+  Timer? _statusTimer;
+  bool _redirecting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(alarmProvider).syncStatus();
+    });
+    _startPolling();
+  }
+
+  void _startPolling() {
+    _statusTimer ??= Timer.periodic(const Duration(seconds: 2), (_) {
+      ref.read(alarmProvider).syncStatus();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      ref.read(alarmProvider).syncStatus();
+      _startPolling();
+    } else {
+      _statusTimer?.cancel();
+      _statusTimer = null;
     }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _statusTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final alarmState = ref.watch(alarmProvider);
+    final ringing =
+        alarmState.alarms.where((entry) => entry.status == 'triggered').toList()
+          ..sort((a, b) {
+            final order = a.triggeredAt.compareTo(b.triggeredAt);
+            return order != 0
+                ? order
+                : a.alarm.startedAt.compareTo(b.alarm.startedAt);
+          });
+    if (ringing.isEmpty) {
+      if (!_redirecting && !alarmState.restoring) {
+        _redirecting = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          final current = ref.read(alarmProvider);
+          if (current.hasTriggered) {
+            setState(() => _redirecting = false);
+            return;
+          }
+          context.go(current.active == null ? '/' : '/active');
+        });
+      }
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    final currentAlert = ringing.first;
+    final alarm = currentAlert.alarm;
+    final waitingAlerts = ringing.skip(1).toList();
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primaryContainer,
       body: SafeArea(
@@ -1132,12 +1226,19 @@ class AlarmTriggeredScreen extends ConsumerWidget {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
-              Text(switch (alarmState.triggerReason) {
+              Text(switch (currentAlert.triggerReason) {
                 'time' => 'The selected time has been reached.',
                 'both' =>
                   'The selected time and distance have both been reached.',
                 _ => 'You have reached the selected distance.',
               }, textAlign: TextAlign.center),
+              if (alarmState.error != null) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Could not refresh alarm status. Retrying…',
+                  textAlign: TextAlign.center,
+                ),
+              ],
               if (waitingAlerts.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
@@ -1174,52 +1275,56 @@ class AlarmTriggeredScreen extends ConsumerWidget {
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed:
-                    () => showModalBottomSheet<void>(
-                      context: context,
-                      builder:
-                          (sheetContext) => SafeArea(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const ListTile(title: Text('Snooze for')),
-                                ...[1, 2, 5].map(
-                                  (minutes) => ListTile(
-                                    title: Text(
-                                      '$minutes ${minutes == 1 ? 'minute' : 'minutes'}',
+                    alarmState.busy
+                        ? null
+                        : () => showModalBottomSheet<void>(
+                          context: context,
+                          builder:
+                              (sheetContext) => SafeArea(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const ListTile(title: Text('Snooze for')),
+                                    ...[1, 2, 5].map(
+                                      (minutes) => ListTile(
+                                        title: Text(
+                                          '$minutes ${minutes == 1 ? 'minute' : 'minutes'}',
+                                        ),
+                                        onTap: () async {
+                                          Navigator.pop(sheetContext);
+                                          try {
+                                            await ref
+                                                .read(alarmProvider)
+                                                .snooze(minutes, alarm.id);
+                                            if (context.mounted) {
+                                              context.go(
+                                                ref
+                                                        .read(alarmProvider)
+                                                        .hasTriggered
+                                                    ? '/triggered'
+                                                    : '/active',
+                                              );
+                                            }
+                                          } catch (_) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Could not snooze alarm.',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                      ),
                                     ),
-                                    onTap: () async {
-                                      Navigator.pop(sheetContext);
-                                      try {
-                                        await ref
-                                            .read(alarmProvider)
-                                            .snooze(minutes, alarm.id);
-                                        if (context.mounted) {
-                                          context.go(
-                                            ref.read(alarmProvider).hasTriggered
-                                                ? '/triggered'
-                                                : '/active',
-                                          );
-                                        }
-                                      } catch (_) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Could not snooze alarm.',
-                                              ),
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                    ),
+                              ),
+                        ),
                 icon: const Icon(Icons.snooze),
                 label: const Text('Snooze'),
               ),

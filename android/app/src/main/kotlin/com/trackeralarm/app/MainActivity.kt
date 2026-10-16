@@ -2,10 +2,8 @@ package com.trackeralarm.app
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
-import android.os.PowerManager
 import android.content.Intent
 import android.net.Uri
 import android.location.Address
@@ -17,6 +15,14 @@ import io.flutter.plugin.common.MethodChannel
 import java.util.Locale
 
 class MainActivity : FlutterActivity() {
+    private val batteryConfirmation = BatteryConfirmation()
+    private var batterySettingsVisited = false
+
+    override fun onPause() {
+        batteryConfirmation.invalidate()
+        super.onPause()
+    }
+
     private var shareChannel: MethodChannel? = null
     private var pendingSharedText: String? = null
 
@@ -49,11 +55,23 @@ class MainActivity : FlutterActivity() {
         acceptShare(intent)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/geofence").setMethodCallHandler { call, result ->
             when (call.method) {
+                "multiClearFinished" -> {
+                    if (MultiAlarmRuntime.clearFinished(this)) result.success(null)
+                    else result.error("storage", "Could not clear finished alarms", null)
+                }
+                "multiStorageWarning" -> result.success(MultiAlarmRuntime.storageWarning(this))
+                "multiClearStorageRecovery" -> {
+                    if (MultiAlarmRuntime.clearStorageRecovery(this)) result.success(null)
+                    else result.error("storage", "Could not delete damaged recovery copies", null)
+                }
                 "multiStates" -> result.success(MultiAlarmRuntime.states(this))
                 "multiRegister" -> {
-                    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
-                        (Build.VERSION.SDK_INT >= 29 && checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
-                        result.error("permission", "Precise and background location permission are required.", null)
+                    val readiness = AlarmReadiness.values(this, batteryConfirmation.valid())
+                    val ready = listOf("preciseLocation", "backgroundLocation", "notifications", "exactAlarms", "fullScreenAlarms")
+                        .all { readiness[it] == true } &&
+                        (readiness["batteryOptimizationOff"] == true || readiness["batteryManuallyConfirmed"] == true)
+                    if (!ready) {
+                        result.error("permission", "Phone settings changed. Recheck the alarm requirements before starting.", null)
                         return@setMethodCallHandler
                     }
                     @Suppress("UNCHECKED_CAST")
@@ -127,24 +145,19 @@ class MainActivity : FlutterActivity() {
                 }
                 "status" -> result.success(AlarmRuntime.prefs(this).getString("status", "inactive"))
                 "state" -> result.success(AlarmRuntime.state(this))
-                "requirements" -> {
-                    val precise = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    val background = Build.VERSION.SDK_INT < 29 || checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
-                    val notifications = if (Build.VERSION.SDK_INT >= 33) {
-                        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED &&
-                            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).areNotificationsEnabled()
-                    } else (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).areNotificationsEnabled()
-                    val battery = if (Build.VERSION.SDK_INT >= 23) {
-                        (getSystemService(Context.POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
-                    } else true
-                    result.success(mapOf(
-                        "preciseLocation" to precise,
-                        "backgroundLocation" to background,
-                        "notifications" to notifications,
-                        "exactAlarms" to AlarmScheduler.canScheduleExact(this),
-                        "batteryOptimizationOff" to battery,
-                        "batteryManuallyConfirmed" to getSharedPreferences("alarm_requirement_setup", MODE_PRIVATE).getBoolean("battery_confirmed", false),
-                    ))
+                "requirements" -> result.success(AlarmReadiness.values(this, batteryConfirmation.valid()))
+                "openNotificationSettings" -> {
+                    try {
+                        startActivity(AlarmReadiness.notificationSettings(this))
+                        result.success(null)
+                    } catch (e: Exception) { result.error("settings", "Could not open notification settings", null) }
+                }
+                "openFullScreenSettings" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= 34) startActivity(Intent(
+                            Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:$packageName")))
+                        result.success(null)
+                    } catch (e: Exception) { result.error("settings", "Could not open lock-screen alarm settings", null) }
                 }
                 "openExactAlarmSettings" -> {
                     try {
@@ -158,12 +171,18 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "confirmBatterySettings" -> {
-                    getSharedPreferences("alarm_requirement_setup", MODE_PRIVATE).edit().putBoolean("battery_confirmed", true).apply()
-                    result.success(null)
+                    if (!batterySettingsVisited) result.error("settings", "Open battery settings and check No restrictions before confirming again.", null)
+                    else {
+                        batteryConfirmation.confirm()
+                        batterySettingsVisited = false
+                        result.success(null)
+                    }
                 }
                 "openBatterySettings" -> {
                     try {
+                        batteryConfirmation.invalidate()
                         startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        batterySettingsVisited = true
                         result.success(null)
                     } catch (e: Exception) {
                         result.error("settings", "Could not open battery optimization settings: ${e.message}", null)
@@ -171,7 +190,9 @@ class MainActivity : FlutterActivity() {
                 }
                 "openAppBatterySettings" -> {
                     try {
+                        batteryConfirmation.invalidate()
                         startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                        batterySettingsVisited = true
                         result.success(null)
                     } catch (e: Exception) {
                         result.error("settings", "Could not open app settings: ${e.message}", null)

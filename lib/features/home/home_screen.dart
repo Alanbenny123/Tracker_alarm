@@ -10,6 +10,7 @@ import '../../models/place.dart';
 import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
+import '../../services/storage_service.dart';
 import '../map/map_view.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -87,7 +88,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       const _SettingsTab(),
     ];
     return Scaffold(
-      body: SafeArea(child: pages[index]),
+      body: SafeArea(
+        child: Column(
+          children: [
+            if (ref.watch(storageProvider).warnings.isNotEmpty ||
+                alarm.storageWarning != null)
+              MaterialBanner(
+                content: const Text(
+                  'Some saved data was repaired. Check Settings for details.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => context.go('/?tab=settings'),
+                    child: const Text('Details'),
+                  ),
+                ],
+              ),
+            if (alarm.error != null)
+              MaterialBanner(
+                content: Text(alarm.error!),
+                actions: [
+                  TextButton(
+                    onPressed: alarm.syncStatus,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            Expanded(child: pages[index]),
+          ],
+        ),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (value) {
@@ -429,11 +459,29 @@ class _SavedTab extends ConsumerWidget {
   const _SavedTab();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final places = ref.watch(placesProvider).places;
+    final saved = ref.watch(placesProvider);
+    final places = saved.places;
     return Scaffold(
-      appBar: AppBar(title: const Text('Saved places')),
+      appBar: AppBar(
+        title: const Text('Saved places'),
+        actions: [
+          IconButton(
+            tooltip: 'Clear saved places',
+            icon: const Icon(Icons.delete_sweep_outlined),
+            onPressed:
+                () => _confirmClearData(
+                  context,
+                  'Clear saved places?',
+                  'This removes saved places and their local recovery copies. Active alarms are kept.',
+                  saved.clear,
+                ),
+          ),
+        ],
+      ),
       body:
-          places.isEmpty
+          saved.error != null
+              ? _storageError(saved.error!, saved.reload)
+              : places.isEmpty
               ? const Center(child: Text('No saved places yet.'))
               : ListView(
                 children:
@@ -447,10 +495,20 @@ class _SavedTab extends ConsumerWidget {
                             trailing: IconButton(
                               icon: const Icon(Icons.delete_outline),
                               tooltip: 'Remove',
-                              onPressed:
-                                  () => ref
-                                      .read(placesProvider)
-                                      .remove(place.id!),
+                              onPressed: () async {
+                                try {
+                                  await saved.remove(place.id!);
+                                } catch (_) {
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Could not remove this place. Try again.',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
                             ),
                           ),
                         )
@@ -469,11 +527,29 @@ class _HistoryTab extends ConsumerWidget {
   const _HistoryTab();
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final trips = ref.watch(historyProvider).trips;
+    final history = ref.watch(historyProvider);
+    final trips = history.trips;
     return Scaffold(
-      appBar: AppBar(title: const Text('Trip history')),
+      appBar: AppBar(
+        title: const Text('Trip history'),
+        actions: [
+          IconButton(
+            tooltip: 'Clear trip history',
+            icon: const Icon(Icons.delete_sweep_outlined),
+            onPressed:
+                () => _confirmClearData(
+                  context,
+                  'Clear trip history?',
+                  'This removes trip history and its local recovery copies. Active alarms and saved places are kept.',
+                  ref.read(alarmProvider).clearTripHistory,
+                ),
+          ),
+        ],
+      ),
       body:
-          trips.isEmpty
+          history.error != null
+              ? _storageError(history.error!, history.reload)
+              : trips.isEmpty
               ? const Center(child: Text('No trips yet.'))
               : ListView(
                 children:
@@ -507,6 +583,8 @@ class _SettingsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
+    final storage = ref.watch(storageProvider);
+    final nativeWarning = ref.watch(alarmProvider).storageWarning;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
@@ -565,7 +643,12 @@ class _SettingsTab extends ConsumerWidget {
             leading: const Icon(Icons.notifications_outlined),
             title: const Text('Notifications'),
             subtitle: const Text('Allow destination alerts in system settings'),
-            onTap: openAppSettings,
+            onTap: () => ref.read(geofenceProvider).openNotificationSettings(),
+          ),
+          ListTile(
+            title: const Text('Lock-screen alarms'),
+            leading: const Icon(Icons.lock_clock_outlined),
+            onTap: () => ref.read(geofenceProvider).openFullScreenSettings(),
           ),
           const Divider(),
           const ListTile(
@@ -618,6 +701,63 @@ class _SettingsTab extends ConsumerWidget {
                       ),
                 ),
           ),
+          const Divider(),
+          const ListTile(
+            title: Text(
+              'LOCAL DATA',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              'The latest ${StorageService.historyLimit} trips are kept on this phone. Android cloud backup and device transfer are disabled.',
+            ),
+          ),
+          for (final warning in [
+            ...storage.warnings,
+            if (nativeWarning != null) nativeWarning,
+          ])
+            ListTile(
+              leading: const Icon(Icons.warning_amber_outlined),
+              title: Text(warning),
+            ),
+          ListTile(
+            title: const Text('Clear trip history'),
+            leading: const Icon(Icons.delete_sweep_outlined),
+            onTap:
+                () => _confirmClearData(
+                  context,
+                  'Clear trip history?',
+                  'This removes trip history and its local recovery copies. Active alarms and saved places are kept.',
+                  ref.read(alarmProvider).clearTripHistory,
+                ),
+          ),
+          ListTile(
+            title: const Text('Clear saved places'),
+            leading: const Icon(Icons.bookmark_remove_outlined),
+            onTap:
+                () => _confirmClearData(
+                  context,
+                  'Clear saved places?',
+                  'This removes saved places and their local recovery copies. Active alarms are kept.',
+                  ref.read(placesProvider).clear,
+                ),
+          ),
+          ListTile(
+            title: const Text('Delete damaged recovery copies'),
+            subtitle: const Text(
+              'Removes damaged data kept after a repair; current alarms, history, and saved places stay.',
+            ),
+            onTap:
+                () => _confirmClearData(
+                  context,
+                  'Delete damaged recovery copies?',
+                  'Damaged entries in these copies cannot be recovered after deletion.',
+                  () async {
+                    await storage.clearRecoveryCopies();
+                    await ref.read(geofenceProvider).clearStorageRecovery();
+                    await ref.read(alarmProvider).syncStatus();
+                  },
+                ),
+          ),
           ListTile(
             title: const Text('Privacy policy'),
             subtitle: const Text('How location and search are used'),
@@ -629,7 +769,7 @@ class _SettingsTab extends ConsumerWidget {
                         title: const Text('Privacy policy'),
                         content: const SingleChildScrollView(
                           child: Text(
-                            'Your active destination, saved places, settings, and trip history are stored on this device. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Place queries may be processed by your device geocoding provider. Bus, metro, and railway stop searches send the searched area’s coordinates to the public Overpass API. Map tile requests go to OpenStreetMap and may reveal the viewed area and your IP address.',
+                            'Your active destination, saved places, settings, and up to 100 recent trips are stored on this device. Android cloud backup and device transfer are disabled. You can delete trip history, saved places, and damaged recovery copies in Settings. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Place queries may be processed by your device geocoding provider. Bus, metro, and railway stop searches send the searched area’s coordinates to the public Overpass API. Map tile requests go to OpenStreetMap and may reveal the viewed area and your IP address.',
                           ),
                         ),
                         actions: [
@@ -693,3 +833,59 @@ double? distanceTo(Position? position, Place place) =>
           place.latitude,
           place.longitude,
         );
+
+Widget _storageError(String message, Future<void> Function() retry) => Center(
+  child: Padding(
+    padding: const EdgeInsets.all(24),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(message, textAlign: TextAlign.center),
+        TextButton(onPressed: retry, child: const Text('Retry')),
+      ],
+    ),
+  ),
+);
+
+Future<void> _confirmClearData(
+  BuildContext context,
+  String title,
+  String message,
+  Future<void> Function() clear,
+) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder:
+        (dialogContext) => AlertDialog(
+          title: Text(title),
+          content: Text(message),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+  );
+  if (confirmed != true) return;
+  try {
+    await clear();
+    if (context.mounted) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Local data deleted.')));
+    }
+  } catch (_) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not delete all data. Please retry.'),
+        ),
+      );
+    }
+  }
+}

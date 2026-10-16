@@ -7,9 +7,20 @@ import '../models/place.dart';
 import '../models/travel_mode.dart';
 
 class TransitStopsService {
-  TransitStopsService({HttpClient? client}) : _client = client ?? HttpClient();
+  TransitStopsService({HttpClient Function()? clientFactory})
+    : _clientFactory = clientFactory ?? HttpClient.new;
 
-  final HttpClient _client;
+  final HttpClient Function() _clientFactory;
+  _StopLookup? _lookup;
+
+  void cancel() {
+    final lookup = _lookup;
+    _lookup = null;
+    if (lookup == null) return;
+    if (!lookup.cancelled.isCompleted) lookup.cancelled.complete([]);
+    lookup.client.close(force: true);
+  }
+
   final Map<String, (DateTime, List<Place>)> _cache = {};
   static const _endpoint = 'https://overpass-api.de/api/interpreter';
 
@@ -18,6 +29,7 @@ class TransitStopsService {
     double latitude,
     double longitude,
   ) async {
+    cancel();
     if (!mode.usesStops) return [];
     final cacheKey =
         '${mode.name}:${(latitude * 1000).round()}:${(longitude * 1000).round()}';
@@ -26,6 +38,33 @@ class TransitStopsService {
         DateTime.now().difference(cached.$1) < const Duration(minutes: 10)) {
       return cached.$2;
     }
+    final lookup = _StopLookup(_clientFactory());
+    _lookup = lookup;
+    lookup.client.connectionTimeout = const Duration(seconds: 12);
+    try {
+      final places = await Future.any([
+        _search(lookup.client, mode, latitude, longitude),
+        lookup.cancelled.future,
+      ]).timeout(const Duration(seconds: 50));
+      if (!identical(_lookup, lookup)) return [];
+      _cache[cacheKey] = (DateTime.now(), places);
+      return places;
+    } on TimeoutException {
+      throw const TransitStopsException(
+        'Stop search timed out. Retry in a moment.',
+      );
+    } finally {
+      lookup.client.close(force: true);
+      if (identical(_lookup, lookup)) _lookup = null;
+    }
+  }
+
+  Future<List<Place>> _search(
+    HttpClient client,
+    TravelMode mode,
+    double latitude,
+    double longitude,
+  ) async {
     final radius = mode == TravelMode.railway ? 5000 : 2500;
     final filter = switch (mode) {
       TravelMode.bus =>
@@ -44,7 +83,7 @@ class TransitStopsService {
     final query = '[out:json][timeout:15];($filter);out center 200;';
     try {
       for (var attempt = 0; attempt < 2; attempt++) {
-        final request = await _client
+        final request = await client
             .postUrl(Uri.parse(_endpoint))
             .timeout(const Duration(seconds: 12));
         request.headers.contentType = ContentType(
@@ -92,7 +131,6 @@ class TransitStopsService {
             a,
           ).compareTo(_roughDistanceMetresTo(latitude, longitude, b)),
         );
-        _cache[cacheKey] = (DateTime.now(), places);
         return places;
       }
       throw const TransitStopsException(
@@ -126,9 +164,15 @@ class TransitStopsService {
   }
 
   void dispose() {
+    cancel();
     _cache.clear();
-    _client.close(force: true);
   }
+}
+
+class _StopLookup {
+  _StopLookup(this.client);
+  final HttpClient client;
+  final cancelled = Completer<List<Place>>();
 }
 
 String _statusMessage(int status) => switch (status) {

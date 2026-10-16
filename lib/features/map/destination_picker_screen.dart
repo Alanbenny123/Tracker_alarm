@@ -19,10 +19,14 @@ class DestinationPickerScreen extends ConsumerStatefulWidget {
     this.initialQuery,
     this.initialMode,
     this.returnSelection = false,
+    this.placesService,
+    this.stopsService,
   });
   final String? initialQuery;
   final TravelMode? initialMode;
   final bool returnSelection;
+  final PlacesService? placesService;
+  final TransitStopsService? stopsService;
   @override
   ConsumerState<DestinationPickerScreen> createState() =>
       _DestinationPickerScreenState();
@@ -31,11 +35,10 @@ class DestinationPickerScreen extends ConsumerStatefulWidget {
 class _DestinationPickerScreenState
     extends ConsumerState<DestinationPickerScreen> {
   final searchController = TextEditingController();
-  final placesService = PlacesService();
-  final stopsService = TransitStopsService();
+  late final PlacesService placesService;
+  late final TransitStopsService stopsService;
   late TravelMode mode;
   int searchGeneration = 0;
-  int stopGeneration = 0;
   List<Place> results = [];
   List<Place> stops = [];
   Place? selected;
@@ -49,6 +52,8 @@ class _DestinationPickerScreenState
   @override
   void initState() {
     super.initState();
+    placesService = widget.placesService ?? PlacesService();
+    stopsService = widget.stopsService ?? TransitStopsService();
     mode = widget.initialMode ?? TravelMode.other;
     final query = widget.initialQuery;
     if (query != null) {
@@ -72,42 +77,54 @@ class _DestinationPickerScreenState
     super.dispose();
   }
 
-  Future<void> search() async {
-    if (searching) return;
-    final text = searchController.text;
-    final generation = ++searchGeneration;
-    if (text.trim().length < 3) {
-      setState(() {
-        results = [];
-        searching = false;
-        error = null;
-        errorSource = null;
-      });
-      return;
-    }
+  // One generation covers both geocoding and stop lookup, since either can
+  // replace the same list, map pins, selection, and error message.
+  void _cancelLookups() {
+    searchGeneration++;
+    placesService.cancel();
+    stopsService.cancel();
+    searching = false;
+    loadingStops = false;
+  }
+
+  void _queryChanged(String _) {
     setState(() {
-      searching = true;
+      _cancelLookups();
+      results = [];
+      stops = [];
+      selected = null;
       error = null;
       errorSource = null;
     });
+  }
+
+  Future<void> search() async {
+    final text = searchController.text.trim();
+    _cancelLookups();
+    final generation = searchGeneration;
+    setState(() {
+      results = [];
+      stops = [];
+      selected = null;
+      searching = text.length >= 3;
+      error = null;
+      errorSource = null;
+    });
+    if (text.length < 3) return;
     try {
       final found = await placesService.search(text);
-      if (mounted) {
-        setState(() {
-          if (generation == searchGeneration) results = found;
-          if (generation == searchGeneration) searching = false;
-        });
-      }
+      if (!mounted || generation != searchGeneration) return;
+      setState(() {
+        results = found;
+        searching = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          if (generation == searchGeneration) {
-            error = e.toString();
-            errorSource = _SearchErrorSource.place;
-          }
-          if (generation == searchGeneration) searching = false;
-        });
-      }
+      if (!mounted || generation != searchGeneration) return;
+      setState(() {
+        error = e.toString();
+        errorSource = _SearchErrorSource.place;
+        searching = false;
+      });
     }
   }
 
@@ -123,10 +140,7 @@ class _DestinationPickerScreenState
       error = null;
       errorSource = null;
       searchController.clear();
-      searchGeneration++;
-      stopGeneration++;
-      searching = false;
-      loadingStops = false;
+      _cancelLookups();
     });
     if (next.usesStops) _loadNearby();
   }
@@ -135,6 +149,10 @@ class _DestinationPickerScreenState
     final position = ref.read(locationProvider).position;
     if (position == null) {
       setState(() {
+        _cancelLookups();
+        results = [];
+        stops = [];
+        selected = null;
         error = 'Waiting for GPS. Search an area, or try nearby again.';
         errorSource = _SearchErrorSource.nearby;
       });
@@ -144,14 +162,14 @@ class _DestinationPickerScreenState
   }
 
   Future<void> _loadStops(LatLng center, String name) async {
-    final generation = ++stopGeneration;
+    _cancelLookups();
+    final generation = searchGeneration;
     setState(() {
       areaCenter = center;
       areaName = name;
       selected = null;
       stops = [];
       results = [];
-      searchGeneration++;
       loadingStops = true;
       searching = false;
       error = null;
@@ -163,13 +181,13 @@ class _DestinationPickerScreenState
         center.latitude,
         center.longitude,
       );
-      if (!mounted || generation != stopGeneration) return;
+      if (!mounted || generation != searchGeneration) return;
       setState(() {
         stops = found;
         loadingStops = false;
       });
     } catch (e) {
-      if (!mounted || generation != stopGeneration) return;
+      if (!mounted || generation != searchGeneration) return;
       setState(() {
         error = e.toString();
         errorSource = _SearchErrorSource.stops;
@@ -201,15 +219,24 @@ class _DestinationPickerScreenState
       _loadStops(LatLng(place.latitude, place.longitude), place.name);
     } else {
       setState(() {
+        _cancelLookups();
         selected = place;
         results = [];
+        error = null;
+        errorSource = null;
       });
     }
   }
 
   void _selectStop(Place place) {
     FocusScope.of(context).unfocus();
-    setState(() => selected = place);
+    setState(() {
+      _cancelLookups();
+      selected = place;
+      results = [];
+      error = null;
+      errorSource = null;
+    });
   }
 
   void selectPoint(LatLng point) {
@@ -219,6 +246,9 @@ class _DestinationPickerScreenState
     }
     FocusScope.of(context).unfocus();
     setState(() {
+      _cancelLookups();
+      error = null;
+      errorSource = null;
       selected = Place(
         name: 'Selected location',
         address:
@@ -286,15 +316,7 @@ class _DestinationPickerScreenState
                     controller: searchController,
                     textInputAction: TextInputAction.search,
                     onSubmitted: (_) => search(),
-                    onChanged: (_) {
-                      searchGeneration++;
-                      setState(() {
-                        results = [];
-                        error = null;
-                        errorSource = null;
-                        searching = false;
-                      });
-                    },
+                    onChanged: _queryChanged,
                     decoration: InputDecoration(
                       prefixIcon: Icon(Icons.search),
                       hintText:

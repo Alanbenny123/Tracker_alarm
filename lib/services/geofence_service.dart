@@ -10,12 +10,16 @@ class AlarmRequirements {
     required this.batteryOptimizationOff,
     this.batteryManuallyConfirmed = false,
     this.exactAlarms = false,
+    this.fullScreenAlarms = false,
+    this.warnings = const [],
   });
 
   final bool preciseLocation;
   final bool backgroundLocation;
   final bool notifications;
   final bool exactAlarms;
+  final bool fullScreenAlarms;
+  final List<String> warnings;
   final bool batteryOptimizationOff;
   final bool batteryManuallyConfirmed;
 
@@ -26,6 +30,7 @@ class AlarmRequirements {
       backgroundLocation &&
       notifications &&
       exactAlarms &&
+      fullScreenAlarms &&
       batteryReady;
 
   String get missingMessage {
@@ -33,9 +38,14 @@ class AlarmRequirements {
     if (!backgroundLocation) {
       return 'Set location to Allow all the time in Android settings.';
     }
-    if (!notifications) return 'Allow notifications to start an alarm.';
+    if (!notifications) {
+      return 'Allow notifications and high-priority alarm alerts in Android settings.';
+    }
     if (!exactAlarms) {
       return 'Allow Alarms & reminders for reliable snooze and repeat alarms.';
+    }
+    if (!fullScreenAlarms) {
+      return 'Allow lock-screen alarms in Android settings.';
     }
     if (!batteryReady) {
       return 'Set battery use to Unrestricted or No restrictions before starting.';
@@ -49,6 +59,9 @@ class AlarmRequirements {
         backgroundLocation: value['backgroundLocation'] == true,
         notifications: value['notifications'] == true,
         exactAlarms: value['exactAlarms'] == true,
+        fullScreenAlarms: value['fullScreenAlarms'] == true,
+        warnings:
+            (value['warnings'] as List? ?? []).whereType<String>().toList(),
         batteryOptimizationOff: value['batteryOptimizationOff'] == true,
         batteryManuallyConfirmed: value['batteryManuallyConfirmed'] == true,
       );
@@ -81,6 +94,14 @@ class GeofenceService {
         'leadMinutes': alarm.leadMinutes,
         'repeatStartDay': alarm.repeatStartDay?.millisecondsSinceEpoch,
       });
+
+  Future<void> clearFinished() =>
+      _channel.invokeMethod<void>('multiClearFinished');
+
+  Future<String?> storageWarning() =>
+      _channel.invokeMethod<String>('multiStorageWarning');
+  Future<void> clearStorageRecovery() =>
+      _channel.invokeMethod<void>('multiClearStorageRecovery');
 
   Future<void> multiEnsure() => _channel.invokeMethod<void>('multiEnsure');
   Future<void> multiUpdateRepeat(String id, int days) => _channel
@@ -134,6 +155,12 @@ class GeofenceService {
     if (value == null) throw StateError('Could not check alarm requirements.');
     return AlarmRequirements.fromMap(value);
   }
+
+  Future<void> openNotificationSettings() =>
+      _channel.invokeMethod<void>('openNotificationSettings');
+
+  Future<void> openFullScreenSettings() =>
+      _channel.invokeMethod<void>('openFullScreenSettings');
 
   Future<void> openExactAlarmSettings() =>
       _channel.invokeMethod<void>('openExactAlarmSettings');

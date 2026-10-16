@@ -8,6 +8,7 @@ void main() {
       'backgroundLocation': true,
       'notifications': true,
       'batteryOptimizationOff': true,
+      'fullScreenAlarms': true,
     };
     expect(AlarmRequirements.fromMap(settings).ready, isFalse);
     expect(
@@ -17,4 +18,23 @@ void main() {
     settings['exactAlarms'] = true;
     expect(AlarmRequirements.fromMap(settings).ready, isTrue);
   });
+  test(
+    'lock-screen access cannot be replaced by manual battery confirmation',
+    () {
+      final settings = <String, dynamic>{
+        'preciseLocation': true,
+        'backgroundLocation': true,
+        'notifications': true,
+        'exactAlarms': true,
+        'batteryManuallyConfirmed': true,
+      };
+      final missing = AlarmRequirements.fromMap(settings);
+      expect(missing.ready, isFalse);
+      expect(missing.missingMessage, contains('lock-screen'));
+      settings['fullScreenAlarms'] = true;
+      expect(AlarmRequirements.fromMap(settings).ready, isTrue);
+      settings['notifications'] = false;
+      expect(AlarmRequirements.fromMap(settings).ready, isFalse);
+    },
+  );
 }

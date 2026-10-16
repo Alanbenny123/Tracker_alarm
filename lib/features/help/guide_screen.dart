@@ -40,7 +40,7 @@ class GuideScreen extends StatelessWidget {
           number: '4',
           title: 'Complete phone settings',
           detail:
-              'Allow precise location all the time, notifications, Alarms & reminders, and unrestricted battery use when the setup screen asks.',
+              'Allow precise location all the time, notifications, Alarms & reminders, lock-screen alarms, and unrestricted battery use when the setup screen asks.',
         ),
         const _GuideStep(
           number: '5',
@@ -62,7 +62,7 @@ class GuideScreen extends StatelessWidget {
           title: 'Finding a destination',
           points: [
             'Bus and Metro show mapped stops or stations within 2.5 km of your current position, a searched area, or a point you tap on the map. Railway searches within 5 km. Only mapped, named stops can appear.',
-            'Search an area, then choose a stop from the list or its map pin. For Other, search a place or tap the map to set an exact point. You can move the pin before confirming.',
+            'Search an area, then choose a stop from the list or its map pin. Changing the query or transport cancels the previous search. For Other, search a place or tap the map to set an exact point. You can move the pin before confirming.',
             'On the setup screen, use Reselect destination to choose a different place before starting the alarm.',
           ],
         ),
@@ -80,7 +80,7 @@ class GuideScreen extends StatelessWidget {
           title: 'Distance, repeat, and multiple alarms',
           points: [
             'The starting alert distance is 500 m for Bus and Metro, and 1 km for Railway and Other. Choose a preset, move the slider, or enter 100–2000 m manually. The manual field lets you choose m or km; changing the unit does not change your typed number.',
-            'Repeat is optional. Select the weekdays when the distance alarm should run. With no days selected, it is a one-time alarm. You can edit repeat days on the active alarm screen.',
+            'Repeat is optional. Select the weekdays when the distance alarm should run. With no days selected, it is a one-time alarm. You can edit repeat days on the active alarm screen. If the first selected day is later, you can save the alarm without waiting for a GPS fix; keep the required permissions enabled for that day.',
             'You can keep up to ten alarms active, including several for one destination or different destinations. Use Add another alarm on the active screen or start from Home. Each alarm has its own radius and repeat days.',
           ],
         ),
@@ -88,9 +88,19 @@ class GuideScreen extends StatelessWidget {
           icon: Icons.lock_outline,
           title: 'Working while the phone is locked',
           points: [
-            'The setup screen checks precise location, Location: Allow all the time, notifications, Alarms & reminders, and Unrestricted or No restrictions battery use. Complete these settings before starting an alarm.',
+            'The setup screen checks precise location, Location: Allow all the time, notifications (including the alarm and tracking channels), Alarms & reminders, lock-screen alarms, and Unrestricted or No restrictions battery use. Complete these settings before starting an alarm.',
+            'Manual battery confirmation expires when you leave the app or after 15 minutes. Recheck No restrictions before confirming again. Zero alarm volume or Do Not Disturb may silence the alert; setup shows warnings for these settings.',
             'Keep phone location services on. If your phone has an Autostart control, allow this app there too. Some phones may still delay background GPS; choose a larger distance when travelling quickly.',
             'When the alarm rings, open its notification or the app to snooze or stop it. Alarms & reminders access lets short snoozes ring while the phone is idle. Force-stopping the app stops background monitoring.',
+          ],
+        ),
+        const _GuideSection(
+          icon: Icons.delete_outline,
+          title: 'Local data and privacy',
+          points: [
+            'The latest 100 trips are kept locally. Use Clear trip history in History or Settings to delete trips and their recovery copies. Active alarms and saved places are kept.',
+            'Saved places can be removed individually or cleared in Settings. Android cloud backup and device transfer are disabled for app data.',
+            'If saved data is damaged, valid entries are recovered and Settings shows a warning. Check your alarms and recreate any missing ones. Delete damaged recovery copies in Settings when you no longer need them.',
           ],
         ),
         const _GuideSection(
@@ -108,7 +118,7 @@ class GuideScreen extends StatelessWidget {
           points: [
             'If a stop or place search fails, tap Retry search beside the error. Check your connection, then try another area or a point on the map if needed. Public stop data and server availability vary.',
             'If Near me waits for GPS, turn on location services or search an area instead. The GPS status on the active screen shows when reception is weak.',
-            'If the phone stays silent while locked, recheck background location, notifications, Alarms & reminders, and unrestricted battery use. A small alert radius or poor GPS reception can delay an alarm.',
+            'If the phone stays silent while locked, recheck background location, notifications, Alarms & reminders, lock-screen alarms, and unrestricted battery use. A small alert radius or poor GPS reception can delay an alarm.',
           ],
         ),
         const _GuideSection(

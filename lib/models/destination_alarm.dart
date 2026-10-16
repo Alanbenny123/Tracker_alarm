@@ -40,25 +40,36 @@ class DestinationAlarm {
     'repeatStartDay': repeatStartDay?.toIso8601String(),
   };
 
-  factory DestinationAlarm.fromJson(Map<String, dynamic> json) =>
-      DestinationAlarm(
-        id: json['id'] as String,
-        place: Place.fromJson(Map<String, dynamic>.from(json['place'] as Map)),
-        radius: (json['radius'] as num).toDouble(),
-        vibration: json['vibration'] as bool? ?? true,
-        sound: json['sound'] as String? ?? 'Default alarm',
-        startedAt: DateTime.parse(json['startedAt'] as String),
-        alertAt:
-            json['alertAt'] == null
-                ? null
-                : DateTime.parse(json['alertAt'] as String),
-        repeatDays: (json['repeatDays'] as num?)?.toInt() ?? 0,
-        leadMinutes: (json['leadMinutes'] as num?)?.toInt() ?? 0,
-        repeatStartDay:
-            json['repeatStartDay'] == null
-                ? null
-                : DateTime.parse(json['repeatStartDay'] as String),
-      );
+  factory DestinationAlarm.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String;
+    final radius = (json['radius'] as num).toDouble();
+    final days = (json['repeatDays'] as num?)?.toInt() ?? 0;
+    if (id.trim().isEmpty ||
+        !radius.isFinite ||
+        radius <= 0 ||
+        days < 0 ||
+        days > 127) {
+      throw const FormatException('Invalid saved alarm');
+    }
+    return DestinationAlarm(
+      id: id,
+      place: Place.fromJson(Map<String, dynamic>.from(json['place'] as Map)),
+      radius: radius,
+      vibration: json['vibration'] as bool? ?? true,
+      sound: json['sound'] as String? ?? 'Default alarm',
+      startedAt: DateTime.parse(json['startedAt'] as String),
+      alertAt:
+          json['alertAt'] == null
+              ? null
+              : DateTime.parse(json['alertAt'] as String),
+      repeatDays: days,
+      leadMinutes: (json['leadMinutes'] as num?)?.toInt() ?? 0,
+      repeatStartDay:
+          json['repeatStartDay'] == null
+              ? null
+              : DateTime.parse(json['repeatStartDay'] as String),
+    );
+  }
 }
 
 class TripRecord {
@@ -76,11 +87,16 @@ class TripRecord {
     'endedAt': endedAt.toIso8601String(),
     'status': status,
   };
-  factory TripRecord.fromJson(Map<String, dynamic> json) => TripRecord(
-    alarm: DestinationAlarm.fromJson(
-      Map<String, dynamic>.from(json['alarm'] as Map),
-    ),
-    endedAt: DateTime.parse(json['endedAt'] as String),
-    status: json['status'] as String,
-  );
+  factory TripRecord.fromJson(Map<String, dynamic> json) {
+    if (json['status'] != 'completed' && json['status'] != 'cancelled') {
+      throw const FormatException('Invalid saved trip status');
+    }
+    return TripRecord(
+      alarm: DestinationAlarm.fromJson(
+        Map<String, dynamic>.from(json['alarm'] as Map),
+      ),
+      endedAt: DateTime.parse(json['endedAt'] as String),
+      status: json['status'] as String,
+    );
+  }
 }

@@ -29,11 +29,23 @@ class Place {
     'longitude': longitude,
   };
 
-  factory Place.fromJson(Map<String, dynamic> json) => Place(
-    id: json['id'] as String?,
-    name: json['name'] as String? ?? 'Selected location',
-    address: json['address'] as String? ?? '',
-    latitude: (json['latitude'] as num).toDouble(),
-    longitude: (json['longitude'] as num).toDouble(),
-  );
+  factory Place.fromJson(Map<String, dynamic> json) {
+    final latitude = (json['latitude'] as num).toDouble();
+    final longitude = (json['longitude'] as num).toDouble();
+    if (!latitude.isFinite ||
+        !longitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
+      throw const FormatException('Invalid saved coordinates');
+    }
+    return Place(
+      id: json['id'] as String?,
+      name: json['name'] as String? ?? 'Selected location',
+      address: json['address'] as String? ?? '',
+      latitude: latitude,
+      longitude: longitude,
+    );
+  }
 }

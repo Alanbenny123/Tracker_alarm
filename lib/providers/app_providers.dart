@@ -13,7 +13,9 @@ import '../services/geofence_service.dart';
 import '../services/location_service.dart';
 import '../services/storage_service.dart';
 
-final storageProvider = Provider<StorageService>((ref) => StorageService());
+final storageProvider = ChangeNotifierProvider<StorageService>(
+  (ref) => StorageService(),
+);
 final geofenceProvider = Provider<GeofenceService>((ref) => GeofenceService());
 final locationServiceProvider = Provider<LocationService>(
   (ref) => LocationService(),
@@ -49,97 +51,197 @@ class SettingsController extends ChangeNotifier {
   bool vibration = true;
 
   Future<void> load() async {
-    final storedTheme = await _storage.getString('theme');
-    theme = ThemeModeSetting.values.firstWhere(
-      (e) => e.name == storedTheme,
-      orElse: () => ThemeModeSetting.system,
+    try {
+      final storedTheme = await _storage.getString('theme');
+      theme = ThemeModeSetting.values.firstWhere(
+        (e) => e.name == storedTheme,
+        orElse: () => ThemeModeSetting.system,
+      );
+      defaultRadius =
+          (await _storage.getDouble('default_radius') ?? 500)
+              .clamp(100, 2000)
+              .toDouble();
+      sound = await _storage.getString('sound') ?? 'Default alarm';
+      vibration = await _storage.getBool('vibration') ?? true;
+    } catch (_) {
+      _storage.reportFailure(
+        'settings',
+        'Could not read app settings. Defaults are shown; stored settings have been kept.',
+      );
+    }
+    notifyListeners();
+  }
+
+  Future<void> _save(
+    Future<void> Function() write,
+    void Function() update,
+  ) async {
+    try {
+      await write();
+      update();
+      notifyListeners();
+    } catch (_) {
+      _storage.reportFailure(
+        'settings',
+        'Could not save app settings. The last displayed settings have been kept. Try again.',
+      );
+    }
+  }
+
+  Future<void> setTheme(ThemeModeSetting value) =>
+      _save(() => _storage.setString('theme', value.name), () => theme = value);
+
+  Future<void> setRadius(double value) {
+    final radius = value.clamp(100, 2000).toDouble();
+    return _save(
+      () => _storage.setDouble('default_radius', radius),
+      () => defaultRadius = radius,
     );
-    defaultRadius =
-        (await _storage.getDouble('default_radius') ?? 500)
-            .clamp(100, 2000)
-            .toDouble();
-    sound = await _storage.getString('sound') ?? 'Default alarm';
-    vibration = await _storage.getBool('vibration') ?? true;
-    notifyListeners();
   }
 
-  Future<void> setTheme(ThemeModeSetting value) async {
-    theme = value;
-    notifyListeners();
-    await _storage.setString('theme', value.name);
-  }
+  Future<void> setSound(String value) =>
+      _save(() => _storage.setString('sound', value), () => sound = value);
 
-  Future<void> setRadius(double value) async {
-    defaultRadius = value.clamp(100, 2000).toDouble();
-    notifyListeners();
-    await _storage.setDouble('default_radius', defaultRadius);
-  }
-
-  Future<void> setSound(String value) async {
-    sound = value;
-    notifyListeners();
-    await _storage.setString('sound', value);
-  }
-
-  Future<void> setVibration(bool value) async {
-    vibration = value;
-    notifyListeners();
-    await _storage.setBool('vibration', value);
-  }
+  Future<void> setVibration(bool value) => _save(
+    () => _storage.setBool('vibration', value),
+    () => vibration = value,
+  );
 }
 
 enum ThemeModeSetting { system, light, dark }
 
+class _SerialMutations {
+  Future<void> _tail = Future.value();
+  Future<void> run(Future<void> Function() action) {
+    final next = _tail.then((_) => action());
+    _tail = next.catchError((Object _) {});
+    return next;
+  }
+}
+
 class PlacesController extends ChangeNotifier {
   PlacesController(this._storage);
   final StorageService _storage;
+  final _mutations = _SerialMutations();
   List<Place> places = [];
+  String? error;
+  bool _loaded = false;
   Future<void>? _loadFuture;
   Future<void> load() => _loadFuture ??= _load();
+  Future<void> reload() {
+    _loaded = false;
+    _loadFuture = null;
+    return load();
+  }
+
   Future<void> _load() async {
-    places = await _storage.savedPlaces();
+    try {
+      places = await _storage.savedPlaces();
+      _loaded = true;
+      error = null;
+    } catch (_) {
+      error =
+          'Could not read saved places. Retry before adding or removing places.';
+    }
     notifyListeners();
   }
 
-  Future<void> add(Place place, String name) async {
+  Future<void> _save(List<Place> next) async {
+    try {
+      await _storage.setSavedPlaces(next);
+      places = next;
+      error = null;
+      notifyListeners();
+    } catch (_) {
+      error = 'Could not save places. Your displayed list has been kept.';
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> add(Place place, String name) => _mutations.run(() async {
     await load();
-    places = [
+    if (!_loaded) throw StateError(error!);
+    await _save([
       ...places,
       place.copyWith(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         name: name.trim(),
       ),
-    ];
-    notifyListeners();
-    await _storage.setSavedPlaces(places);
-  }
+    ]);
+  });
 
-  Future<void> remove(String id) async {
+  Future<void> remove(String id) => _mutations.run(() async {
     await load();
-    places = places.where((e) => e.id != id).toList();
+    if (!_loaded) throw StateError(error!);
+    await _save(places.where((place) => place.id != id).toList());
+  });
+
+  Future<void> clear() => _mutations.run(() async {
+    await load();
+    await _storage.clearSavedPlaces();
+    places = [];
+    _loaded = true;
+    error = null;
     notifyListeners();
-    await _storage.setSavedPlaces(places);
-  }
+  });
 }
 
 class HistoryController extends ChangeNotifier {
   HistoryController(this._storage);
   final StorageService _storage;
+  final _mutations = _SerialMutations();
   List<TripRecord> trips = [];
+  String? error;
+  bool _loaded = false;
   Future<void>? _loadFuture;
   Future<void> load() => _loadFuture ??= _load();
+  Future<void> reload() {
+    _loaded = false;
+    _loadFuture = null;
+    return load();
+  }
+
   Future<void> _load() async {
-    trips = await _storage.history();
+    try {
+      trips = StorageService.boundedHistory(await _storage.history());
+      _loaded = true;
+      error = null;
+    } catch (_) {
+      error =
+          'Could not read trip history. Finished alarms will be kept until you retry.';
+    }
     notifyListeners();
   }
 
-  Future<void> add(TripRecord trip) async {
+  Future<void> add(TripRecord trip) => _mutations.run(() async {
     await load();
+    if (!_loaded) throw StateError(error!);
     if (trips.any((existing) => existing.alarm.id == trip.alarm.id)) return;
-    trips = [trip, ...trips];
+    final next = StorageService.boundedHistory([trip, ...trips]);
+    try {
+      // Publish only after persistence succeeds; failed archival can be retried
+      // without treating an unsaved trip as a duplicate and forgetting it.
+      await _storage.setHistory(next);
+      trips = next;
+      error = null;
+      notifyListeners();
+    } catch (_) {
+      error =
+          'Could not save trip history. Finished alarms are kept for retry.';
+      notifyListeners();
+      rethrow;
+    }
+  });
+
+  Future<void> clear() => _mutations.run(() async {
+    await load();
+    await _storage.clearHistory();
+    trips = [];
+    _loaded = true;
+    error = null;
     notifyListeners();
-    await _storage.setHistory(trips);
-  }
+  });
 }
 
 class LocationController extends ChangeNotifier {
@@ -250,7 +352,8 @@ class AlarmController extends ChangeNotifier {
   bool busy = false;
   bool restoring = true;
   bool _triggering = false;
-  bool _syncing = false;
+  Future<void>? _syncFuture;
+  String? storageWarning;
 
   List<AlarmProgress> get alarms => List.unmodifiable(_entries);
   AlarmProgress? get selected {
@@ -317,22 +420,8 @@ class AlarmController extends ChangeNotifier {
   }
 
   Future<void> _applyNativeStates(List<Map<String, dynamic>> states) async {
-    final next = <AlarmProgress>[];
-    for (final state in states) {
-      final entry = _parse(state);
-      if (entry.live) {
-        next.add(entry);
-      } else {
-        await _history.add(
-          TripRecord(
-            alarm: entry.alarm,
-            endedAt: DateTime.now(),
-            status: entry.status,
-          ),
-        );
-        await _geofence.multiForget(entry.alarm.id);
-      }
-    }
+    final parsed = states.map(_parse).toList();
+    final next = parsed.where((entry) => entry.live).toList();
     final previousSignature = _entries.map(_signature).join('|');
     final nextSignature = next.map(_signature).join('|');
     final oldSelected = _selectedId;
@@ -356,6 +445,16 @@ class AlarmController extends ChangeNotifier {
       error = null;
       notifyListeners();
     }
+    for (final entry in parsed.where((entry) => !entry.live)) {
+      await _history.add(
+        TripRecord(
+          alarm: entry.alarm,
+          endedAt: DateTime.now(),
+          status: entry.status,
+        ),
+      );
+      await _geofence.multiForget(entry.alarm.id);
+    }
   }
 
   String _signature(AlarmProgress entry) =>
@@ -368,25 +467,35 @@ class AlarmController extends ChangeNotifier {
     try {
       final legacyRaw = await _storage.getString('active_alarm');
       final states = await _geofence.multiStates();
-      if (legacyRaw != null && legacyRaw.isNotEmpty) {
-        final legacy = DestinationAlarm.fromJson(
-          Map<String, dynamic>.from(jsonDecode(legacyRaw) as Map),
-        );
-        if (!states.any((state) => state['id'] == legacy.id)) {
-          final legacyStatus = await _geofence.status();
-          if (legacyStatus == 'completed' || legacyStatus == 'cancelled') {
-            await _history.add(
-              TripRecord(
-                alarm: legacy,
-                endedAt: DateTime.now(),
-                status: legacyStatus,
-              ),
-            );
-          }
-        }
-        await _storage.setString('active_alarm', '');
-      }
       await _applyNativeStates(states);
+      if (legacyRaw != null && legacyRaw.isNotEmpty) {
+        DestinationAlarm? legacy;
+        try {
+          legacy = DestinationAlarm.fromJson(
+            Map<String, dynamic>.from(jsonDecode(legacyRaw) as Map),
+          );
+        } on FormatException {
+          await _storage.preserveDamagedLegacy(legacyRaw);
+        } on TypeError {
+          await _storage.preserveDamagedLegacy(legacyRaw);
+        }
+        if (legacy != null) {
+          if (!states.any((state) => state['id'] == legacy!.id)) {
+            final legacyStatus = await _geofence.status();
+            if (legacyStatus == 'completed' || legacyStatus == 'cancelled') {
+              await _history.add(
+                TripRecord(
+                  alarm: legacy,
+                  endedAt: DateTime.now(),
+                  status: legacyStatus,
+                ),
+              );
+            }
+          }
+          await _storage.setString('active_alarm', '');
+        }
+      }
+      storageWarning = await _geofence.storageWarning();
       if (_entries.isNotEmpty) await _geofence.multiEnsure();
     } catch (e) {
       error = 'Could not restore destination alarms: $e';
@@ -395,20 +504,35 @@ class AlarmController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> syncStatus() async {
-    if (_syncing) return;
-    _syncing = true;
+  Future<void> syncStatus() =>
+      _syncFuture ??= _syncStatus().whenComplete(() {
+        _syncFuture = null;
+      });
+
+  Future<void> _syncStatus() async {
     try {
       await _applyNativeStates(await _geofence.multiStates());
+      final warning = await _geofence.storageWarning();
+      if (warning != storageWarning) {
+        storageWarning = warning;
+        notifyListeners();
+      }
     } catch (e) {
       final nextError = e.toString();
       if (error != nextError) {
         error = nextError;
         notifyListeners();
       }
-    } finally {
-      _syncing = false;
     }
+  }
+
+  Future<void> clearTripHistory() async {
+    await syncStatus();
+    await _geofence.clearFinished();
+    await _history.clear();
+    await _geofence.clearStorageRecovery();
+    storageWarning = null;
+    notifyListeners();
   }
 
   Future<void> start(
@@ -430,11 +554,22 @@ class AlarmController extends ChangeNotifier {
       if (!requirements.ready) {
         throw LocationException(requirements.missingMessage);
       }
-      final position = await _location.current();
+      final now = DateTime.now();
       final firstRepeatDay =
           repeatDays == 0 || alertAt != null
               ? repeatStartDay
-              : repeatStartDay ?? nextRepeatDay(repeatDays, DateTime.now());
+              : repeatStartDay ?? nextRepeatDay(repeatDays, now);
+      final target =
+          firstRepeatDay ?? alertAt?.add(Duration(minutes: leadMinutes));
+      final repeatDistanceReady =
+          repeatDays == 0 ||
+          (target != null &&
+              target.year == now.year &&
+              target.month == now.month &&
+              target.day == now.day);
+      // Future repeat days need saved coordinates and permissions, not a GPS fix
+      // at creation time. The native tracker acquires GPS on the selected day.
+      final position = repeatDistanceReady ? await _location.current() : null;
       final alarm = DestinationAlarm(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         place: place,
@@ -450,16 +585,7 @@ class AlarmController extends ChangeNotifier {
       await _geofence.multiRegister(alarm);
       registered = true;
       _selectedId = alarm.id;
-      final target =
-          firstRepeatDay ?? alertAt?.add(Duration(minutes: leadMinutes));
-      final now = DateTime.now();
-      final repeatDistanceReady =
-          repeatDays == 0 ||
-          (target != null &&
-              target.year == now.year &&
-              target.month == now.month &&
-              target.day == now.day);
-      if (repeatDistanceReady &&
+      if (position != null &&
           position.accuracy <= radius &&
           _location.distance(position, place.latitude, place.longitude) <=
               radius) {
