@@ -26,6 +26,10 @@ Device power settings or poor GPS reception can delay an alert. The minimum radi
 
 ## Verification
 
+Native Android regression tests run with `cd android` then `./gradlew :app:testDebugUnitTest -x :app:compileFlutterBuildDebug`. They use Robolectric and the real Kotlin alarm runtime to cover GPS crossings, queue order, notification dismissal, wake-lock cleanup, reboot recovery, and the restricted lock-screen activity. The first run downloads test dependencies. These JVM tests do not package or install the app and do not replace physical locked-screen travel tests.
+
+The native tracker adjusts GPS sampling to speed and alert radius near a destination. It also checks whether a short, accurate GPS segment crossed a radius between samples; it rejects inference across long gaps, poor accuracy, or implausible jumps. The full-screen notification opens a separate native activity with alarm controls only. Opening the main app follows the normal lock-screen protection.
+
 Run `flutter analyze` and `flutter test`. On a physical Android device, verify foreground, minimized, and locked-screen entry at 100 m, 500 m, and 2 km; notification permission denied; precise/background location denied; GPS disabled; internet disconnected after setup; process and device restart; notification Stop/Snooze; a weekday repeat across two days; destination reselection during setup; several alarms for the same and different destinations; and cancellation of one alarm while others continue. For multiple destinations, create them in reverse travel order, lock the screen, enter the first destination's radius, dismiss its alert from the notification, and continue to the second without unlocking. Both must ring in travel order. Also check that GPS and the monitoring wake lock are released after ending all alarms and while a repeating distance alarm waits for a future day. Check walking and vehicle travel because GPS timing depends on device and conditions.
 
 Release builds use a private keystore referenced by `android/key.properties`. Keep that file and the keystore outside Git; debug builds do not need them. See Flutter's Android signing guide before publishing.

@@ -22,6 +22,7 @@ object MultiAlarmRuntime {
     private const val MAX_ALARMS = 10
     private const val KEY = "alarms"
     private var scheduledAt = 0L
+    private var previousFix: Location? = null
 
     data class Entry(
         val id: String,
@@ -441,31 +442,43 @@ object MultiAlarmRuntime {
 
     @Synchronized fun checkLocation(context: Context, location: Location): Long {
         checkDue(context)
-        if (System.currentTimeMillis() - location.time > 30_000L) return 30_000L
+        if (System.currentTimeMillis() - location.time !in 0..30_000L) return 30_000L
+        val previous = previousFix
+        previousFix = Location(location)
         val entries = live(context)
         if (entries.none { !it.distanceFired && it.distanceReady(System.currentTimeMillis()) }) {
             return 30 * 60_000L
         }
         var closest = Float.MAX_VALUE
-        val reached = mutableListOf<Pair<Entry, Float>>()
+        val reached = mutableListOf<Triple<Entry, Float, Double>>()
+        var speedInterval = 30_000L
         for (entry in entries) {
             if (entry.distanceFired || !entry.distanceReady(System.currentTimeMillis())) continue
             val distances = FloatArray(1)
             Location.distanceBetween(location.latitude, location.longitude, entry.latitude, entry.longitude, distances)
             val remaining = distances[0] - entry.radius
+            val crossing = if (previous != null && previous.time >= maxOf(entry.startedAt, entry.cycleDay))
+                DestinationCrossing.fraction(previous, location, entry.latitude, entry.longitude, entry.radius)
+                else null
+            if (remaining <= 5_000f && location.hasSpeed() && location.speed > 1f) {
+                speedInterval = minOf(speedInterval,
+                    (entry.radius / location.speed * 500).toLong().coerceIn(1_000L, 30_000L))
+            }
             if (remaining <= 0f) {
                 if (location.hasAccuracy() && location.accuracy > maxOf(100f, entry.radius)) {
                     closest = 0f // Seek a more accurate fix before ringing.
-                } else reached.add(entry to distances[0])
+                } else reached.add(Triple(entry, distances[0], crossing ?: 1.0))
             }
+            else if (crossing != null) reached.add(Triple(entry, distances[0], crossing))
             else if (remaining < closest) closest = remaining
         }
-        reached.sortedBy { it.second }.forEach { (entry, _) -> trigger(context, entry.id, "distance") }
-        return when {
+        reached.sortedWith(compareBy<Triple<Entry, Float, Double>> { it.third }.thenBy { it.second })
+            .forEach { (entry, _, _) -> trigger(context, entry.id, "distance") }
+        return minOf(speedInterval, when {
             closest <= 1_000f -> 5_000L
             closest <= 5_000f -> 10_000L
             else -> 30_000L
-        }
+        })
     }
 
     private fun timeIntent(context: Context) = PendingIntent.getBroadcast(
@@ -543,6 +556,7 @@ object MultiAlarmRuntime {
         scheduleNext(context, read(context))
         val service = Intent(context, MultiTrackingService::class.java)
         if (live(context).isEmpty()) {
+            previousFix = null
             context.stopService(service)
             AlarmRuntime.notifications(context).cancel(TRACKING_ID)
             AlarmRuntime.notifications(context).cancel(ALARM_ID)
@@ -577,6 +591,10 @@ object MultiAlarmRuntime {
             Intent(context, MainActivity::class.java).setAction("tracker_alarm.ALARM")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val lockedAlarm = PendingIntent.getActivity(context, 48,
+            Intent(context, LockedAlarmActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return builder(context, AlarmRuntime.CHANNEL_ALARM)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(when (entry.triggerReason) { "time" -> "Time alarm"; "both" -> "Time and distance alarm"; else -> "Destination nearby" })
@@ -584,7 +602,7 @@ object MultiAlarmRuntime {
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setPriority(Notification.PRIORITY_MAX)
-            .setContentIntent(open).setFullScreenIntent(open, true)
+            .setContentIntent(open).setFullScreenIntent(lockedAlarm, true)
             .addAction(Notification.Action.Builder(android.R.drawable.ic_media_pause, "Snooze 1 min", action(context, entry.id, "SNOOZE", 43)).build())
             .addAction(Notification.Action.Builder(android.R.drawable.ic_delete, "Stop alert", action(context, entry.id, "DISMISS", 44)).build())
             .addAction(Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel, "End trip", action(context, entry.id, "END", 45)).build())

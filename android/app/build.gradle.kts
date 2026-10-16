@@ -36,9 +36,18 @@ android {
         }
     }
     buildTypes { release { signingConfig = signingConfigs.getByName("release") } }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 kotlin { compilerOptions { jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17 } }
 
 flutter { source = "../.." }
-dependencies { implementation("com.google.android.gms:play-services-location:21.3.0") }
+// Flutter's asset-copy task is not wired into AGP 9 host-test packaging.
+tasks.matching { it.name == "packageDebugUnitTestForUnitTest" }.configureEach {
+    dependsOn("copyFlutterAssetsDebug")
+}
+dependencies {
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.17")
+}
