@@ -43,12 +43,84 @@ void main() {
 
   test('reads coordinates and name from a Google Maps place share', () async {
     final place = await service.parse(
-      'Central Station\nhttps://www.google.com/maps/place/Central+Station/@9.931233,76.267304,17z',
+      'Central Station\nhttps://www.google.com/maps/place/Central+Station/@9.95,76.28,17z/data=!3d9.931233!4d76.267304',
     );
     expect(place?.name, 'Central Station');
     expect(place?.latitude, 9.931233);
     expect(place?.longitude, 76.267304);
   });
+
+  test(
+    'full Maps links without coordinates retain their place search query',
+    () async {
+      final lookup = SharedLocationService(
+        clientFactory: () => throw StateError('No network needed'),
+      );
+      expect(
+        await lookup.parse(
+          'https://www.google.com/maps/place/Central+Station/data=!4m2!3m1!1sabc',
+        ),
+        isNull,
+      );
+      expect(lookup.resolvedQuery, 'Central Station');
+      expect(
+        await lookup.parse(
+          'https://www.google.com/maps/search/?api=1&query=Central%20Station',
+        ),
+        isNull,
+      );
+      expect(lookup.resolvedQuery, 'Central Station');
+    },
+  );
+
+  test(
+    'place names containing literal percent signs are decoded only once',
+    () async {
+      expect(
+        service.queryFromMapsUrl(
+          Uri.parse('https://www.google.com/maps/place/50%25+Cafe/data=!1sabc'),
+        ),
+        '50% Cafe',
+      );
+      final place = await service.parse(
+        'https://www.google.com/maps/place/50%25+Cafe/data=!3d9.93!4d76.26',
+      );
+      expect(place?.name, '50% Cafe');
+    },
+  );
+
+  test(
+    'a useful redirect is kept without requesting a potentially blocked final page',
+    () async {
+      final response = _ShareResponse(
+        location:
+            'https://www.google.com/maps/place/Central+Station/data=!1sabc',
+      );
+      final request = _ShareRequest(response);
+      final client = _ShareClient()..request.complete(request);
+      final lookup = SharedLocationService(clientFactory: () => client);
+      expect(await lookup.parse('https://maps.app.goo.gl/place'), isNull);
+      expect(lookup.resolvedQuery, 'Central Station');
+      expect(request.followRedirects, isFalse);
+      expect(client.requests, 1);
+      expect(response.bodyRead, isFalse);
+      expect(client.closed, isTrue);
+    },
+  );
+
+  test(
+    'unrelated redirect hosts are rejected without following them',
+    () async {
+      final response = _ShareResponse(
+        location: 'https://example.com/?q=9.93,76.26',
+      );
+      final client = _ShareClient()..request.complete(_ShareRequest(response));
+      final lookup = SharedLocationService(clientFactory: () => client);
+      expect(await lookup.parse('https://maps.app.goo.gl/untrusted'), isNull);
+      expect(lookup.resolvedQuery, isNull);
+      expect(client.requests, 1);
+    },
+  );
 
   test('reads destination coordinates from Maps data URL', () async {
     final place = await service.parse(
@@ -57,6 +129,72 @@ void main() {
     expect(place?.latitude, 9.931233);
     expect(place?.longitude, 76.267304);
   });
+
+  test(
+    'the reported Hello pets link searches its full address instead of the generic Android title',
+    () async {
+      const address =
+          'Hello+pets,+Mamangalam,+Edappally,+Ernakulam,+Keralam+682025';
+      final response = _ShareResponse(
+        location:
+            'https://www.google.com/maps/place/$address/data=!4m2!3m1!1s0x3b080db2a0e034ab:0x5fd3c727041dbccf!18m1!1e1?g_st=aw',
+      );
+      final client = _ShareClient()..request.complete(_ShareRequest(response));
+      final lookup = SharedLocationService(clientFactory: () => client);
+      const text =
+          'Hello pets\nhttps://maps.app.goo.gl/fwc4aVUmk4fWWyfy5?g_st=aw';
+      expect(
+        await lookup.parse(text),
+        isNull,
+      ); // No target coordinates to guess.
+      expect(
+        lookup.fallbackQuery(text),
+        'Hello pets, Mamangalam, Edappally, Ernakulam, Keralam 682025',
+      );
+      expect(client.requests, 1);
+      expect(response.bodyRead, isFalse);
+    },
+  );
+
+  test(
+    'named-place camera coordinates do not silently become the destination',
+    () async {
+      expect(
+        await service.parse(
+          'https://www.google.com/maps/place/Central+Station/@9.95,76.28,17z',
+        ),
+        isNull,
+      );
+      expect(service.resolvedQuery, 'Central Station');
+      expect(
+        await service.parse('https://www.google.com/maps/@9.95,76.28,17z'),
+        isNull,
+      );
+      expect(
+        await service.parse('https://www.google.com/maps?ll=9.95,76.28'),
+        isNull,
+      );
+    },
+  );
+
+  test(
+    'explicit query destination wins over an earlier viewport or geo origin',
+    () async {
+      final place = await service.parse(
+        'https://www.google.com/maps?ll=9.95,76.28&q=9.93,76.26',
+      );
+      expect(place?.latitude, 9.93);
+      expect(place?.longitude, 76.26);
+      final geo = await service.parse('geo:0,0?q=9.93,76.26');
+      expect(geo?.latitude, 9.93);
+      expect(geo?.longitude, 76.26);
+      final pin = await service.parse(
+        'https://www.google.com/maps/place/9.93,76.26/@9.95,76.28,17z',
+      );
+      expect(pin?.latitude, 9.93);
+      expect(pin?.longitude, 76.26);
+    },
+  );
 
   test('rejects coordinates outside the world', () async {
     expect(await service.parse('999,999'), isNull);
@@ -101,6 +239,7 @@ void main() {
 }
 
 class _ShareClient implements HttpClient {
+  int requests = 0;
   final request = Completer<HttpClientRequest>();
   final started = Completer<void>();
   bool closed = false;
@@ -108,6 +247,7 @@ class _ShareClient implements HttpClient {
   Duration? connectionTimeout;
   @override
   Future<HttpClientRequest> getUrl(Uri url) {
+    requests++;
     started.complete();
     return request.future;
   }
@@ -132,6 +272,12 @@ class _ShareRequest implements HttpClientRequest {
 }
 
 class _ShareResponse implements HttpClientResponse {
+  _ShareResponse({this.location = 'https://www.google.com/maps?q=9.93,76.26'});
+  final String location;
+  @override
+  int get statusCode => 302;
+  @override
+  HttpHeaders get headers => _Headers(location);
   bool bodyRead = false;
   @override
   List<RedirectInfo> get redirects => [_ShareRedirect()];
@@ -146,6 +292,16 @@ class _ShareResponse implements HttpClientResponse {
     return const Stream<List<int>>.empty().listen(onData);
   }
 
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _Headers implements HttpHeaders {
+  _Headers(this.location);
+  final String location;
+  @override
+  String? value(String name) =>
+      name == HttpHeaders.locationHeader ? location : null;
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

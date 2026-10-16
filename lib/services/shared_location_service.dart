@@ -30,6 +30,9 @@ class SharedLocationService {
   Future<String?> takePendingShare() =>
       channel.invokeMethod<String>('takePendingShare');
 
+  /// Resolved Maps place/address is more specific than Android's shared title.
+  String? fallbackQuery(String text) => resolvedQuery ?? searchQuery(text);
+
   String? searchQuery(String text) {
     final withoutLinks = text.replaceAll(RegExp(r'https?://[^\s]+'), '').trim();
     if (withoutLinks.isEmpty) return null;
@@ -50,7 +53,12 @@ class SharedLocationService {
     final link = RegExp(r'https?://[^\s]+').firstMatch(text)?.group(0);
     if (link == null) return null;
     final uri = Uri.tryParse(link);
-    if (uri == null || !_isGoogleShortLink(uri)) return null;
+    if (uri == null) return null;
+    if (_isGoogleMapsLink(uri) && !_isGoogleShortLink(uri)) {
+      resolvedQuery = queryFromMapsUrl(uri);
+      return null;
+    }
+    if (!_isGoogleShortLink(uri)) return null;
 
     final lookup = _ShareLookup(_clientFactory());
     _lookup = lookup;
@@ -71,18 +79,30 @@ class SharedLocationService {
 
   Future<(Place?, String?)> _resolve(HttpClient client, Uri uri) async {
     try {
-      final request = await client.getUrl(uri);
-      request.followRedirects = true;
-      request.maxRedirects = 5;
-      final response = await request.close();
-      var resolved = uri;
-      for (final redirect in response.redirects) {
-        resolved = resolved.resolveUri(redirect.location);
+      var current = uri;
+      for (var hop = 0; hop <= 5; hop++) {
+        // Inspect each Location header before following it. Once a useful Maps
+        // destination is known, consent pages and stalled final responses must
+        // not discard it or consume the remaining lookup deadline.
+        final request = await client.getUrl(current);
+        request.followRedirects = false;
+        final response = await request.close();
+        final location = response.headers.value(HttpHeaders.locationHeader);
+        if (response.statusCode < 300 ||
+            response.statusCode >= 400 ||
+            location == null) {
+          return (null, null);
+        }
+        final next = current.resolve(location);
+        if (!_isGoogleMapsLink(next) && !_isGoogleShortLink(next)) {
+          return (null, null);
+        }
+        final place = _placeFromText(next.toString());
+        final query = place == null ? queryFromMapsUrl(next) : null;
+        if (place != null || query != null) return (place, query);
+        current = next;
       }
-      // Only redirect headers are needed. Do not wait for a Maps HTML body.
-      if (!_isGoogleMapsLink(resolved)) return (null, null);
-      final place = _placeFromText(resolved.toString());
-      return (place, place == null ? queryFromMapsUrl(resolved) : null);
+      return (null, null);
     } on Exception {
       return (null, null);
     }
@@ -102,10 +122,17 @@ class SharedLocationService {
 
   String? queryFromMapsUrl(Uri uri) {
     if (!_isGoogleMapsLink(uri)) return null;
-    final match = RegExp(r'/place/([^/]+)').firstMatch(uri.path);
-    if (match == null) return null;
-    final query =
-        Uri.decodeComponent(match.group(1)!).replaceAll('+', ' ').trim();
+    // pathSegments/queryParameters decode percent escapes once.
+    final segments = uri.pathSegments;
+    final placeIndex = segments.indexOf('place');
+    final name =
+        placeIndex >= 0 && placeIndex + 1 < segments.length
+            ? segments[placeIndex + 1].replaceAll('+', ' ')
+            : null;
+    final value =
+        name ?? uri.queryParameters['query'] ?? uri.queryParameters['q'];
+    if (value == null) return null;
+    final query = value.trim();
     return query.isEmpty ? null : query;
   }
 
@@ -127,7 +154,7 @@ class SharedLocationService {
             ? prefix.split('\n').first.trim()
             : placePath == null
             ? 'Shared location'
-            : Uri.decodeComponent(placePath).replaceAll('+', ' ');
+            : placePath.replaceAll('+', ' ');
     return Place(
       name: name.isEmpty ? 'Shared location' : name,
       address:
@@ -142,11 +169,23 @@ class SharedLocationService {
     const longitude = r'(-?\d{1,3}(?:\.\d+)?)';
     final pair = '$number\\s*,\\s*$longitude';
     final encoded = RegExp('!3d$number!4d$longitude');
-    final tagged = RegExp('(?:@|[?&](?:q|query|ll|destination)=|geo:)$pair');
+    // @ and ll describe the camera/viewport, not necessarily the selected pin.
+    // Query coordinates and embedded place coordinates are explicit targets.
+    final tagged = RegExp('[?&](?:q|query|destination)=$pair');
+    final placePath = RegExp(
+      '/place/$pair'
+      r'(?:/|[?&#]|$)',
+    );
+    final geo = RegExp(
+      '^geo:$pair'
+      r'(?:[;?]|$)',
+    );
     final plain = RegExp('^\\s*$pair\\s*\$');
     final match =
         encoded.firstMatch(text) ??
         tagged.firstMatch(text) ??
+        placePath.firstMatch(text) ??
+        geo.firstMatch(text) ??
         plain.firstMatch(text);
     if (match == null) return null;
     final lat = double.tryParse(match.group(1)!);

@@ -31,7 +31,7 @@ Stop results are reused for ten minutes across picker visits. If refreshing fail
 
 ## Share a place from Google Maps
 
-In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen (up to 12 seconds), or tap Cancel. Then review the destination in setup. If the link contains no usable coordinates, the app may open place search so you can select the correct result. A shortened Google Maps link needs internet to resolve. Google Maps' downloaded offline maps cannot be imported into this app.
+In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen (up to 12 seconds), or tap Cancel. Then review the destination in setup. If the link contains no usable coordinates, the app may open place search so you can select the correct result. A shortened Google Maps link needs internet to resolve. Google Maps' downloaded offline maps cannot be imported into this app. When a link contains only a place name or map camera center, the app searches the full resolved place/address instead of guessing a destination from the camera coordinates. Check the result name and map pin before confirming.
 
 ## Repeat and multiple alarms
 

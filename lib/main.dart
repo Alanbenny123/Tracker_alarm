@@ -55,6 +55,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
         path: '/pick',
         builder:
             (context, state) => DestinationPickerScreen(
+              key: ObjectKey(state.extra),
               initialQuery:
                   state.extra is String ? state.extra as String : null,
               initialMode:
@@ -78,6 +79,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
                     mode: TravelMode.other,
                   );
           return AlarmSetupScreen(
+            key: ObjectKey(state.extra),
             place: args.place,
             mode: args.mode,
             initialAlarm: args.initialAlarm,
@@ -129,13 +131,14 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       }
       if (!mounted || _shareCancelled) return;
       if (place == null) {
-        final query =
-            _shareService.searchQuery(text) ?? _shareService.resolvedQuery;
+        final query = _shareService.fallbackQuery(text);
         if (query != null) {
           router.go('/pick', extra: query);
           _messengerKey.currentState?.showSnackBar(
             const SnackBar(
-              content: Text('Choose the shared place from search results.'),
+              content: Text(
+                'This link has no exact coordinates. Confirm the shared place in search results.',
+              ),
             ),
           );
         } else {
