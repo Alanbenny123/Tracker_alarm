@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:tracker_alarm/main.dart';
@@ -38,7 +39,117 @@ class _RetryShareService extends SharedLocationService {
   }
 }
 
+class _NamedShareService extends SharedLocationService {
+  @override
+  Future<Place?> parse(String text) async {
+    resolvedQuery = "St. George's Syro-Malabar Church, Kalady";
+    return null;
+  }
+}
+
 void main() {
+  for (final ambiguous in [false, true]) {
+    testWidgets(
+      ambiguous
+          ? 'a shared place with multiple matching pins asks the user to choose'
+          : 'a shared place without coordinates searches and selects its matching pin',
+      (tester) async {
+        const text = 'https://maps.app.goo.gl/wn1hjHyCztTvCcSZ6';
+        final shared = stationA.copyWith(
+          name: "St. George's Syro-Malabar Church",
+          address: 'Kalady, Kerala',
+        );
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        var takes = 0;
+        messenger.setMockMethodCallHandler(
+          SharedLocationService.channel,
+          (_) async => ++takes == 1 ? text : null,
+        );
+        const places = MethodChannel('tracker_alarm/places');
+        final searches = <String>[];
+        messenger.setMockMethodCallHandler(places, (call) async {
+          searches.add(call.arguments['query'] as String);
+          return [
+            const Place(
+              name: 'Unrelated church',
+              address: 'Halifax, Canada',
+              latitude: 44.65,
+              longitude: -63.63,
+            ).toJson(),
+            stationB
+                .copyWith(name: 'Kalady', address: 'Kalady, Kerala')
+                .toJson(),
+            shared.toJson(),
+            if (ambiguous)
+              stationB
+                  .copyWith(
+                    name: "St. George's Syro-Malabar Church",
+                    address: 'Another address, Kalady, Kerala',
+                  )
+                  .toJson(),
+          ];
+        });
+        addTearDown(() {
+          messenger.setMockMethodCallHandler(
+            SharedLocationService.channel,
+            null,
+          );
+          messenger.setMockMethodCallHandler(places, null);
+        });
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              storageProvider.overrideWith((ref) => RawMemoryStorage()),
+              geofenceProvider.overrideWithValue(_Native()),
+              locationServiceProvider.overrideWithValue(_Location()),
+            ],
+            child: TrackerAlarmApp(sharedLocationService: _NamedShareService()),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pumpAndSettle();
+        expect(searches, ["St. George's Syro-Malabar Church, Kalady"]);
+        expect(find.text('Unrelated church'), findsNothing);
+        if (ambiguous) {
+          expect(
+            tester.widget<MapView>(find.byType(MapView)).destination,
+            isNull,
+          );
+          expect(find.text('Confirm destination'), findsNothing);
+          await tester.tap(find.text(shared.name).first);
+          await tester.pumpAndSettle();
+        }
+        final map = tester.widget<MapView>(find.byType(MapView));
+        expect(map.destination?.latitude, shared.latitude);
+        expect(map.destination?.longitude, shared.longitude);
+        final camera =
+            tester
+                .widget<FlutterMap>(find.byType(FlutterMap))
+                .mapController!
+                .camera;
+        expect(camera.center.latitude, shared.latitude);
+        expect(camera.center.longitude, shared.longitude);
+        expect(find.text('Confirm destination'), findsOneWidget);
+        expect(
+          find.textContaining('This link has no exact coordinates'),
+          findsNothing,
+        );
+        await tester.tap(find.text('Confirm destination'));
+        await tester.pumpAndSettle();
+        expect(find.text('Destination alarm'), findsOneWidget);
+        expect(find.text(shared.name), findsOneWidget);
+        expect(
+          tester.widget<MapView>(find.byType(MapView)).destination?.latitude,
+          shared.latitude,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
   testWidgets(
     'a network failure offers Retry and never starts a generic worldwide search',
     (tester) async {

@@ -223,6 +223,23 @@ void main() {
   });
 
   test(
+    'the reported Kalady church short link retains its full geocoding query',
+    () async {
+      final response = _ShareResponse(
+        location:
+            "https://www.google.com/maps/place/St.+George's+Syro-Malabar+Church,+Kalady/data=!4m2!3m1!1s0x3b0807e8a6e81da3:0x2f50285efa39c651!18m1!1e1",
+      );
+      final client = _ShareClient()..request.complete(_ShareRequest(response));
+      final lookup = SharedLocationService(clientFactory: () => client);
+      expect(
+        await lookup.parse('https://maps.app.goo.gl/wn1hjHyCztTvCcSZ6'),
+        isNull,
+      );
+      expect(lookup.resolvedQuery, "St. George's Syro-Malabar Church, Kalady");
+    },
+  );
+
+  test(
     'the reported Hello pets link searches its full address instead of the generic Android title',
     () async {
       const address =

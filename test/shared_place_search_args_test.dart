@@ -9,6 +9,44 @@ void main() {
     latitude: 44.65,
     longitude: -63.63,
   );
+  test('a matching area alone is never selected as the shared business', () {
+    const args = SharedPlaceSearchArgs('Hello pets, Mamangalam, Edappally');
+    const area = Place(
+      name: 'Mamangalam',
+      address: 'Edappally, Kerala',
+      latitude: 9.98,
+      longitude: 76.29,
+    );
+    expect(args.matches(area), isTrue);
+    expect(args.singleNamedMatch([area]), isNull);
+    expect(args.singleNamedMatch([]), isNull);
+  });
+
+  test('name punctuation does not prevent a unique shared-place match', () {
+    const args = SharedPlaceSearchArgs(
+      "St. George's Syro-Malabar Church, Kalady",
+    );
+    const church = Place(
+      name: 'St George’s Syro Malabar Church',
+      address: 'Kalady, Kerala',
+      latitude: 10,
+      longitude: 76,
+    );
+    expect(args.singleNamedMatch([church]), same(church));
+  });
+
+  test('a shared business in a different locality is not auto-selected', () {
+    const args = SharedPlaceSearchArgs(
+      'Hello pets, Mamangalam, Edappally, Ernakulam, Kerala',
+    );
+    const differentBranch = Place(
+      name: 'Hello pets',
+      address: 'Kozhikode, Kerala',
+      latitude: 11.25,
+      longitude: 75.77,
+    );
+    expect(args.singleNamedMatch([differentBranch]), isNull);
+  });
   test(
     'business name fallback does not accept an unrelated numbered address',
     () {

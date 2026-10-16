@@ -146,26 +146,29 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('choosing a map point invalidates a pending place search', (
-    tester,
-  ) async {
-    final places = _Places();
-    final stops = _Stops();
-    await tester.pumpWidget(_app(places, stops));
-    await tester.enterText(find.byType(TextField), 'old area');
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump();
-    expect(places.requests, hasLength(1));
-    tester.widget<MapView>(find.byType(MapView)).onTap!(const LatLng(10, 76));
-    await tester.pump();
-    places.requests.single.complete([stationA]);
-    await tester.pump();
-    expect(find.text('Selected location'), findsOneWidget);
-    expect(find.text('Station A'), findsNothing);
-    expect(find.text('Confirm destination'), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    await tester.pumpWidget(const SizedBox());
-  });
+  testWidgets(
+    'choosing a map point invalidates a pending shared-place search',
+    (tester) async {
+      final places = _Places();
+      final stops = _Stops();
+      await tester.pumpWidget(
+        _app(places, stops, TravelMode.other, true, 'Old shop, Kochi'),
+      );
+      await tester.pump();
+      expect(places.requests, hasLength(1));
+      tester.widget<MapView>(find.byType(MapView)).onTap!(const LatLng(10, 76));
+      await tester.pump();
+      places.requests.single.complete([
+        stationA.copyWith(name: 'Old shop', address: 'Kochi'),
+      ]);
+      await tester.pump();
+      expect(find.text('Selected location'), findsOneWidget);
+      expect(find.text('Old shop'), findsNothing);
+      expect(find.text('Confirm destination'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'transport change ignores old stop errors and uses the new stations',
@@ -218,6 +221,7 @@ Widget _app(
   _Stops stops, [
   TravelMode mode = TravelMode.other,
   bool sharedPlace = false,
+  String? initialQuery,
 ]) => ProviderScope(
   overrides: [
     locationProvider.overrideWith(
@@ -228,6 +232,7 @@ Widget _app(
   child: MaterialApp(
     home: DestinationPickerScreen(
       initialMode: mode,
+      initialQuery: initialQuery,
       sharedPlace: sharedPlace,
       placesService: places,
       stopsService: stops,

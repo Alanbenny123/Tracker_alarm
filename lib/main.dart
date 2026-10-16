@@ -144,13 +144,6 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
         final query = _shareService.fallbackQuery(text);
         if (query != null) {
           router.go('/pick', extra: SharedPlaceSearchArgs(query));
-          _messengerKey.currentState?.showSnackBar(
-            const SnackBar(
-              content: Text(
-                'This link has no exact coordinates. Confirm the shared place in search results.',
-              ),
-            ),
-          );
         } else {
           router.go('/pick');
           _messengerKey.currentState?.showSnackBar(

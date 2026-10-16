@@ -50,6 +50,7 @@ class _DestinationPickerScreenState
   String? error;
   _SearchErrorSource? errorSource;
   bool searching = false;
+  bool sharedResultSelected = false;
   bool loadingStops = false;
   String? emptyPlaceQuery;
   bool stopsLoaded = false;
@@ -91,6 +92,7 @@ class _DestinationPickerScreenState
     placesService.cancel();
     stopsService.cancel();
     searching = false;
+    sharedResultSelected = false;
     loadingStops = false;
     emptyPlaceQuery = null;
     stopsLoaded = false;
@@ -131,8 +133,16 @@ class _DestinationPickerScreenState
               ? received.where(SharedPlaceSearchArgs(text).matches).toList()
               : received;
       if (!mounted || generation != searchGeneration) return;
+      final sharedSelection =
+          widget.sharedPlace &&
+                  text == widget.initialQuery?.trim() &&
+                  !mode.usesStops
+              ? SharedPlaceSearchArgs(text).singleNamedMatch(found)
+              : null;
       setState(() {
-        results = found;
+        selected = sharedSelection;
+        sharedResultSelected = sharedSelection != null;
+        results = sharedSelection == null ? found : [];
         searching = false;
         emptyPlaceQuery = found.isEmpty ? text : null;
       });
@@ -352,7 +362,18 @@ class _DestinationPickerScreenState
                       ),
                     ),
                   ),
-                  if (searching) const LinearProgressIndicator(),
+                  if (searching) ...[
+                    if (widget.sharedPlace)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Text(
+                          'Finding the shared place…',
+                          semanticsLabel:
+                              'Finding coordinates for the shared place',
+                        ),
+                      ),
+                    const LinearProgressIndicator(),
+                  ],
                   if (loadingStops) const LinearProgressIndicator(),
                   if (transitNotice != null)
                     Padding(
@@ -389,6 +410,13 @@ class _DestinationPickerScreenState
                             label: const Text('Retry search'),
                           ),
                         ],
+                      ),
+                    ),
+                  if (results.isNotEmpty && widget.sharedPlace)
+                    const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Select the matching place to view its coordinates.',
                       ),
                     ),
                   if (results.isNotEmpty)
@@ -547,7 +575,9 @@ class _DestinationPickerScreenState
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        mode.usesStops
+                        sharedResultSelected
+                            ? 'Found from the shared place. Check the pin before confirming. You can drag it to adjust the location.'
+                            : mode.usesStops
                             ? 'Tap another stop on the map, or tap the map to search another area.'
                             : 'Tap the map or drag the pin to move it.',
                         textAlign: TextAlign.center,
