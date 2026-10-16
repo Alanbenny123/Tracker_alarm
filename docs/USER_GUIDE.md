@@ -17,7 +17,7 @@ Destination Alarm rings when your phone reaches a chosen distance from a destina
 
 ## Finding bus stops and stations
 
-Bus and Metro search within **3 km** of the chosen area. Railway searches within **5 km**. These results come from mapped, named OpenStreetMap places. A real stop may be missing if it has not been mapped or named. Searches need internet.
+Bus and Metro search within **2.5 km** of the chosen area. Railway searches within **5 km**. These results come from mapped, named OpenStreetMap places. A real stop may be missing if it has not been mapped or named. Searches need internet.
 
 Use the search box to find an area, then select a result. The app loads stops around that area. You can also tap another map area. If a search fails, the error appears by the search box with **Retry search**. Retry repeats the failed place or stop search. If the server remains busy, search another area or use **Other** and choose a map point.
 
