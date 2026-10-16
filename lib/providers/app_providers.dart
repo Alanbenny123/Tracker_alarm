@@ -215,6 +215,10 @@ class AlarmProgress {
     required this.triggerReason,
     required this.triggeredAt,
     this.distanceReady = true,
+    this.monitoringMessage,
+    this.monitoringHealthy,
+    this.gpsStatus,
+    this.geofenceStatus,
   });
 
   final DestinationAlarm alarm;
@@ -224,6 +228,10 @@ class AlarmProgress {
   final String triggerReason;
   final int triggeredAt;
   final bool distanceReady;
+  final String? monitoringMessage;
+  final bool? monitoringHealthy;
+  final String? gpsStatus;
+  final String? geofenceStatus;
 
   bool get live =>
       status == 'active' || status == 'triggered' || status == 'snoozed';
@@ -301,6 +309,10 @@ class AlarmController extends ChangeNotifier {
       triggerReason: state['triggerReason'] as String? ?? 'distance',
       triggeredAt: (state['triggeredAt'] as num?)?.toInt() ?? 0,
       distanceReady: state['distanceReady'] as bool? ?? true,
+      monitoringMessage: state['monitoringMessage'] as String?,
+      monitoringHealthy: state['monitoringHealthy'] as bool?,
+      gpsStatus: state['gpsStatus'] as String?,
+      geofenceStatus: state['geofenceStatus'] as String?,
     );
   }
 
@@ -349,7 +361,8 @@ class AlarmController extends ChangeNotifier {
   String _signature(AlarmProgress entry) =>
       '${entry.alarm.id}:${entry.status}:${entry.timeFired}:'
       '${entry.distanceFired}:${entry.distanceReady}:${entry.alarm.alertAt}:'
-      '${entry.triggerReason}:${entry.triggeredAt}';
+      '${entry.triggerReason}:${entry.triggeredAt}:${entry.monitoringMessage}:'
+      '${entry.monitoringHealthy}:${entry.gpsStatus}:${entry.geofenceStatus}';
 
   Future<void> restore() async {
     try {

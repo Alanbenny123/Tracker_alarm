@@ -121,7 +121,10 @@ object MultiAlarmRuntime {
     @Synchronized fun states(context: Context): List<Map<String, Any>> {
         migrateLegacy(context)
         checkDue(context)
-        return read(context).map { it.map() }
+        return read(context).map { entry ->
+            entry.map() + MultiTrackingService.health(context) + mapOf(
+                "geofenceStatus" to (geofenceStatus[entry.id] ?: "Not confirmed"))
+        }
     }
     @Synchronized fun live(context: Context): List<Entry> = read(context).filter { it.live() }
     @Synchronized fun ringing(context: Context): Entry? = read(context)
@@ -396,7 +399,7 @@ object MultiAlarmRuntime {
         if (write(context, entries)) refresh(context)
     }
 
-    @Synchronized fun checkDue(context: Context) {
+    @Synchronized fun checkDue(context: Context, refreshService: Boolean = true) {
         val entries = read(context)
         val now = System.currentTimeMillis()
         var changed = false
@@ -431,7 +434,7 @@ object MultiAlarmRuntime {
             if (!alreadyRinging && entry.status == "triggered") entry.triggeredAt = triggerTime++
         }
         if (changed && write(context, entries)) {
-            refresh(context)
+            if (refreshService) refresh(context)
             advanced.filter { it.distanceReady(now) }.forEach { addGeofence(context, it) }
         } else scheduleNext(context, entries)
     }
@@ -476,6 +479,13 @@ object MultiAlarmRuntime {
             Intent(context, MultiGeofenceReceiver::class.java), flags)
     }
 
+    private val geofenceStatus = mutableMapOf<String, String>()
+
+    fun playbackResumeRequired(context: Context) = prefs(context).getBoolean("playback_resume_required", false)
+    fun setPlaybackResumeRequired(context: Context, required: Boolean) {
+        prefs(context).edit().putBoolean("playback_resume_required", required).commit()
+    }
+
     private fun addGeofence(context: Context, entry: Entry) {
         if (!entry.live() || entry.distanceFired || !entry.distanceReady(System.currentTimeMillis())) return
         try {
@@ -490,17 +500,20 @@ object MultiAlarmRuntime {
             val client = LocationServices.getGeofencingClient(context)
             client.addGeofences(request, geofenceIntent(context))
                 .addOnSuccessListener {
+                    geofenceStatus[entry.id] = "Registered"
                     if (live(context).none { it.id == entry.id && !it.distanceFired &&
                             it.distanceReady(System.currentTimeMillis()) }) {
                         removeGeofence(context, entry.id)
                     }
                 }
-        } catch (_: Exception) {
-            // Foreground GPS monitoring is still active without this backup.
+                .addOnFailureListener { geofenceStatus[entry.id] = "Unavailable: ${it.message ?: "registration failed"}" }
+        } catch (e: Exception) {
+            geofenceStatus[entry.id] = "Unavailable: ${e.message ?: "registration failed"}"
         }
     }
 
     private fun removeGeofence(context: Context, id: String) {
+        geofenceStatus.remove(id)
         try { LocationServices.getGeofencingClient(context).removeGeofences(listOf(id)) }
         catch (_: Exception) { }
     }
@@ -578,14 +591,14 @@ object MultiAlarmRuntime {
             .setOngoing(true).build()
     }
 
-    fun trackingNotification(context: Context, count: Int): Notification {
+    fun trackingNotification(context: Context, count: Int, message: String? = null): Notification {
         AlarmRuntime.notifications(context)
         val open = PendingIntent.getActivity(context, 46, Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return builder(context, AlarmRuntime.CHANNEL_TRACKING)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle("Destination alarms active")
-            .setContentText("Monitoring $count destination${if (count == 1) "" else "s"}")
+            .setContentText(message ?: "Monitoring $count destination${if (count == 1) "" else "s"}")
             .setContentIntent(open).setOngoing(true).build()
     }
 

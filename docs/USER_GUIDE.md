@@ -35,6 +35,8 @@ When an alarm rings, use the app or its notification to handle it. **Snooze** pa
 
 ## Locked phone and offline use
 
+After restarting the phone, check the app's notification. If it says an alert needs attention, open the app to resume that pending alert. The active screen shows whether the background service is running, whether GPS fixes are fresh, and whether the geofence backup is registered.
+
 The app uses background location monitoring, a foreground service, and an Android geofence backup where available. Keep the required permissions and unrestricted battery setting enabled. Some phones also need their separate Autostart setting. GPS accuracy and device power management can delay an alert, especially at small radii or higher travel speeds. Do not force-stop the app while relying on an alarm.
 
 After the destination is selected and the alarm starts, monitoring the saved coordinates does **not** require internet. Online map tiles, stop searches, many place searches, and shortened Google Maps links do require internet. The app does not include an offline basemap. The active screen shows distance while the online map is hidden.

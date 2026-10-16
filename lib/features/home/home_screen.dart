@@ -412,6 +412,8 @@ class _ActiveAlarmCard extends ConsumerWidget {
             ? 'Snoozed'
             : entry.alarm.repeatDays != 0 && !entry.distanceReady
             ? 'Scheduled'
+            : entry.monitoringHealthy == false
+            ? 'Needs attention'
             : 'Monitoring'}',
       ),
       trailing: const Icon(Icons.chevron_right),

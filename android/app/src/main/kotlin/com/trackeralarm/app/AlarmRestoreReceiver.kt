@@ -13,7 +13,12 @@ class AlarmRestoreReceiver : BroadcastReceiver() {
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED -> {
                 MultiAlarmRuntime.realignClock(context)
-                MultiAlarmRuntime.checkDue(context)
+                if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+                    // Restore GPS first. Android 15+ forbids media playback FGS
+                    // launches from BOOT_COMPLETED; the user resumes a pending alert.
+                    MultiAlarmRuntime.checkDue(context, refreshService = false)
+                    MultiAlarmRuntime.setPlaybackResumeRequired(context, MultiAlarmRuntime.ringing(context) != null)
+                } else MultiAlarmRuntime.checkDue(context)
                 MultiAlarmRuntime.ensureGeofences(context)
                 MultiAlarmRuntime.refresh(context)
             }

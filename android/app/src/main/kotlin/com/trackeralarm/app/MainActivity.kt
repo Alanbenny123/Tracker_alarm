@@ -65,6 +65,7 @@ class MainActivity : FlutterActivity() {
                     MultiAlarmRuntime.register(this, args, result)
                 }
                 "multiEnsure" -> {
+                    MultiAlarmRuntime.setPlaybackResumeRequired(this, false)
                     MultiAlarmRuntime.refresh(this)
                     MultiAlarmRuntime.ensureGeofences(this)
                     result.success(null)

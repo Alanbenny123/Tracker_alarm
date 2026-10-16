@@ -22,6 +22,37 @@ class MultiTrackingService : Service() {
         private const val HEARTBEAT_MS = 30_000L
         private const val WAKE_TIMEOUT_MS = 90_000L
         private var running: MultiTrackingService? = null
+        private var startFailure: String? = null
+
+        fun health(context: Context): Map<String, Any> {
+            val service = running ?: return mapOf(
+                "monitoringMessage" to (startFailure ?: "Background service not running. Reopen the app to restart."),
+                "monitoringHealthy" to false, "gpsStatus" to "Not monitoring")
+            if (MultiAlarmRuntime.playbackResumeRequired(context)) return mapOf(
+                "monitoringMessage" to "Phone restarted. Open the app to resume the pending alert.",
+                "monitoringHealthy" to false, "gpsStatus" to "Alert needs attention")
+            val distanceActive = MultiAlarmRuntime.live(context).any {
+                !it.distanceFired && it.distanceReady(System.currentTimeMillis())
+            }
+            if (!distanceActive) return mapOf("monitoringMessage" to "Waiting for the next scheduled alert.",
+                "monitoringHealthy" to true, "gpsStatus" to "Not needed right now")
+            val age = if (service.lastFixElapsed == 0L) Long.MAX_VALUE else
+                SystemClock.elapsedRealtime() - service.lastFixElapsed
+            val problem = when {
+                !service.gpsEnabled() -> "GPS is off. Turn on location services."
+                service.interval == 0L -> "GPS subscription failed. Check location permissions."
+                age > WAKE_TIMEOUT_MS -> "Waiting for a fresh GPS fix."
+                else -> null
+            }
+            return mapOf(
+                "monitoringMessage" to (problem ?: "GPS monitoring active · last fix ${age / 1000} s ago"),
+                "monitoringHealthy" to (problem == null),
+                "gpsStatus" to if (problem != null) problem else when {
+                    service.lastAccuracy <= 20f -> "Excellent"
+                    service.lastAccuracy <= 80f -> "Good"
+                    else -> "Weak (${service.lastAccuracy.toInt()} m accuracy)"
+                })
+        }
 
         fun refreshIfRunning(): Boolean = try {
             running?.syncRuntime() == true
@@ -42,6 +73,7 @@ class MultiTrackingService : Service() {
     private var interval = 0L
     private var ringingId: String? = null
     private var lastFixElapsed = 0L
+    private var lastAccuracy = Float.MAX_VALUE
     private var lastRequestElapsed = 0L
     private val heartbeat = object : Runnable {
         override fun run() {
@@ -57,7 +89,10 @@ class MultiTrackingService : Service() {
     }
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            lastFixElapsed = SystemClock.elapsedRealtime()
+            if (System.currentTimeMillis() - location.time in 0..30_000L) {
+                lastFixElapsed = SystemClock.elapsedRealtime()
+                lastAccuracy = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE
+            }
             val wanted = MultiAlarmRuntime.checkLocation(this@MultiTrackingService, location)
             if (wanted <= 30_000L && wanted != interval) requestUpdates(wanted)
             syncRuntime()
@@ -83,6 +118,22 @@ class MultiTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return try {
+            startFailure = null
+            startMonitoring()
+        } catch (e: Exception) {
+            startFailure = "Background monitoring could not start. Check location permissions and battery settings."
+            Log.e(TAG, "Could not start monitoring", e)
+            stopUpdates()
+            releaseWakeLock()
+            sound.stop()
+            running = null
+            stopSelf()
+            START_NOT_STICKY
+        }
+    }
+
+    private fun startMonitoring(): Int {
         if (!syncRuntime()) return START_NOT_STICKY
         MultiAlarmRuntime.checkDue(this)
         if (!syncRuntime()) return START_NOT_STICKY
@@ -100,7 +151,7 @@ class MultiTrackingService : Service() {
             return false
         }
         val ringing = MultiAlarmRuntime.ringing(this)
-        if (ringing != null) {
+        if (ringing != null && !MultiAlarmRuntime.playbackResumeRequired(this)) {
             val notification = MultiAlarmRuntime.alarmNotification(this, ringing)
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(MultiAlarmRuntime.ALARM_ID, notification,
@@ -113,7 +164,8 @@ class MultiTrackingService : Service() {
                 ringingId = ringing.id
             }
         } else {
-            val notification = MultiAlarmRuntime.trackingNotification(this, live.size)
+            val notification = MultiAlarmRuntime.trackingNotification(this, live.size,
+                health(this)["monitoringMessage"] as String)
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(MultiAlarmRuntime.TRACKING_ID, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)

@@ -145,6 +145,33 @@ const stationNearby = Place(
 
 void main() {
   test(
+    'native monitoring failures and GPS health reach the alarm UI state',
+    () async {
+      final storage = MemoryStorage();
+      final native = FakeNative();
+      final controller = AlarmController(
+        storage,
+        native,
+        FakeLocation(),
+        HistoryController(storage),
+      );
+      await controller.restore();
+      await controller.start(stationA, 500, true, 'Bell');
+      native.entry(controller.active!.id).addAll({
+        'monitoringHealthy': false,
+        'monitoringMessage': 'GPS subscription failed',
+        'gpsStatus': 'Waiting for GPS',
+        'geofenceStatus': 'Unavailable',
+      });
+      await controller.syncStatus();
+      expect(controller.selected!.monitoringHealthy, isFalse);
+      expect(controller.selected!.monitoringMessage, 'GPS subscription failed');
+      expect(controller.selected!.gpsStatus, 'Waiting for GPS');
+      expect(controller.selected!.geofenceStatus, 'Unavailable');
+    },
+  );
+
+  test(
     'separate alarms can target the same and different destinations',
     () async {
       final storage = MemoryStorage();

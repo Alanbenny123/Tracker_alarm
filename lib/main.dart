@@ -174,40 +174,12 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(settingsProvider.select((s) => s.theme));
-    ThemeData theme(Brightness brightness) {
-      final scheme = ColorScheme.fromSeed(
-        seedColor: const Color(0xFF236A68),
-        brightness: brightness,
-      );
-      return ThemeData(
-        useMaterial3: true,
-        colorScheme: scheme,
-        scaffoldBackgroundColor: scheme.surface,
-        appBarTheme: const AppBarTheme(centerTitle: false),
-        cardTheme: CardThemeData(
-          elevation: 0,
-          color: scheme.surfaceContainerLow,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(54),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-          ),
-        ),
-      );
-    }
-
     return MaterialApp.router(
       scaffoldMessengerKey: _messengerKey,
       title: 'Destination Alarm',
       debugShowCheckedModeBanner: false,
-      theme: theme(Brightness.light),
-      darkTheme: theme(Brightness.dark),
+      theme: createAppTheme(Brightness.light),
+      darkTheme: createAppTheme(Brightness.dark),
       themeMode: switch (mode) {
         ThemeModeSetting.light => ThemeMode.light,
         ThemeModeSetting.dark => ThemeMode.dark,
@@ -254,4 +226,28 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       routerConfig: router,
     );
   }
+}
+
+ThemeData createAppTheme(Brightness brightness) {
+  final scheme = ColorScheme.fromSeed(
+    seedColor: const Color(0xFF236A68),
+    brightness: brightness,
+  );
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: scheme.surface,
+    appBarTheme: const AppBarTheme(centerTitle: false),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(0, 54),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+    ),
+  );
 }

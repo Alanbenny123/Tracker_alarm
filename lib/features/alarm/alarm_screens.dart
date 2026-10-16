@@ -922,7 +922,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                 ListTile(
                   leading: const Icon(Icons.gps_fixed),
                   title: const Text('GPS status'),
-                  subtitle: Text(quality),
+                  subtitle: Text(alarmState.selected?.gpsStatus ?? quality),
                 ),
                 ListTile(
                   leading: const Icon(Icons.radio_button_checked),
@@ -951,8 +951,9 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                         ? 'Snoozed'
                         : alarm.repeatDays != 0 &&
                             alarmState.selected?.distanceReady == false
-                        ? 'Next selected day scheduled; GPS checks less often until then'
-                        : 'GPS monitoring active; geofence backup where available',
+                        ? 'Waiting for the next selected day'
+                        : '${alarmState.selected?.monitoringMessage ?? 'Checking background monitoring…'}'
+                            '\nGeofence backup: ${alarmState.selected?.geofenceStatus ?? 'Not confirmed'}',
                   ),
                 ),
               ],
