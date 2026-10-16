@@ -363,6 +363,46 @@ class AlarmController extends ChangeNotifier {
   bool _triggering = false;
   Future<void>? _syncFuture;
   String? storageWarning;
+  StreamSubscription<void>? _statusSubscription;
+  int _statusEpoch = 0;
+  bool _syncAgain = false;
+  bool _disposed = false;
+
+  void startStatusUpdates() {
+    if (_disposed || _statusSubscription != null) return;
+    final epoch = ++_statusEpoch;
+    _statusSubscription = _geofence.statusChanges.listen(
+      (_) {
+        if (_disposed || epoch != _statusEpoch) return;
+        _syncAgain = true;
+        if (!restoring) unawaited(syncStatus());
+      },
+      onError: (Object event) {
+        if (_disposed || epoch != _statusEpoch) return;
+        error =
+            'Live alarm updates are unavailable. Refresh alarms or reopen the app.';
+        notifyListeners();
+      },
+    );
+    if (!restoring) {
+      _syncAgain = true;
+      unawaited(syncStatus());
+    }
+  }
+
+  void stopStatusUpdates() {
+    _statusEpoch++;
+    final subscription = _statusSubscription;
+    _statusSubscription = null;
+    unawaited(subscription?.cancel());
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    stopStatusUpdates();
+    super.dispose();
+  }
 
   List<AlarmProgress> get alarms => List.unmodifiable(_entries);
   AlarmProgress? get selected {
@@ -443,6 +483,7 @@ class AlarmController extends ChangeNotifier {
   }
 
   Future<void> _applyNativeStates(List<Map<String, dynamic>> states) async {
+    if (_disposed) return;
     final parsed = states.map(_parse).toList();
     final next = parsed.where((entry) => entry.live).toList();
     final previousSignature = _entries.map(_signature).join('|');
@@ -526,7 +567,9 @@ class AlarmController extends ChangeNotifier {
       error = 'Could not restore destination alarms: $e';
     }
     restoring = false;
+    if (_disposed) return;
     notifyListeners();
+    if (_syncAgain) unawaited(syncStatus());
   }
 
   Future<void> syncStatus() =>
@@ -535,20 +578,28 @@ class AlarmController extends ChangeNotifier {
       });
 
   Future<void> _syncStatus() async {
-    try {
-      await _applyNativeStates(await _geofence.multiStates());
-      final warning = await _geofence.storageWarning();
-      if (warning != storageWarning) {
-        storageWarning = warning;
-        notifyListeners();
+    do {
+      _syncAgain = false;
+      try {
+        await _applyNativeStates(await _geofence.multiStates());
+        if (_disposed) return;
+        final warning = await _geofence.storageWarning();
+        if (_disposed) return;
+        if (warning != storageWarning) {
+          storageWarning = warning;
+          notifyListeners();
+        }
+      } catch (e) {
+        if (_disposed) return;
+        final nextError = e.toString();
+        if (error != nextError) {
+          error = nextError;
+          notifyListeners();
+        }
       }
-    } catch (e) {
-      final nextError = e.toString();
-      if (error != nextError) {
-        error = nextError;
-        notifyListeners();
-      }
-    }
+      // An event received during a read must not be lost or apply an older
+      // snapshot after a newer event. Only this queue reads event snapshots.
+    } while (_syncAgain && !_disposed);
   }
 
   Future<void> clearTripHistory() async {

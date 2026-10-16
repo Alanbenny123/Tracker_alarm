@@ -16,12 +16,6 @@ class AlarmSoundPlayer(private val context: Context) {
     private var vibrator: Vibrator? = null
 
     @Suppress("DEPRECATION")
-    fun start() {
-        val sound = AlarmRuntime.prefs(context).getString("sound", "Default alarm")
-        start(sound ?: "Default alarm", AlarmRuntime.prefs(context).getBoolean("vibration", true))
-    }
-
-    @Suppress("DEPRECATION")
     fun start(sound: String, vibration: Boolean) {
         if (player != null) return
         val resId = when (sound) {

@@ -20,6 +20,7 @@ import android.content.Context
 import android.os.Looper
 import java.util.Calendar
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 import android.content.Intent
 import android.location.Location
 import android.location.LocationManager
@@ -45,6 +46,8 @@ class AlarmRuntimeTest {
     private var base = 0L
 
     @Before fun reset() {
+        AlarmStatusEvents.onCancel(null)
+        app.getSharedPreferences("destination_monitor", Context.MODE_PRIVATE).edit().clear().commit()
         ShadowAlarmManager.setCanScheduleExactAlarms(true)
         app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE).edit().clear().commit()
         MultiAlarmRuntime.refresh(app)
@@ -72,6 +75,102 @@ class AlarmRuntimeTest {
         elapsedRealtimeNanos = (100_000L + offset) * 1_000_000
         this.accuracy = accuracy
         speed = 90f
+    }
+
+    private fun legacy(status: String = "active") {
+        app.getSharedPreferences("destination_monitor", Context.MODE_PRIVATE).edit()
+            .putString("id", "legacy").putString("name", "Old destination")
+            .putString("latitude", "9.9").putString("longitude", "76.7")
+            .putFloat("radius", 500f).putLong("startedAt", base)
+            .putString("status", status).putString("sound", "Bell")
+            .putBoolean("vibration", false).putBoolean("distanceFired", status != "active")
+            .commit()
+    }
+
+    @Test fun legacyMigrationPreservesOthersAndDoesNotResurrectAnArchivedAlarm() {
+        save(entry("other"))
+        legacy()
+        MultiAlarmRuntime.migrateLegacy(app)
+        assertEquals(setOf("other", "legacy"), MultiAlarmRuntime.live(app).map { it.id }.toSet())
+        val migrated = MultiAlarmRuntime.live(app).first { it.id == "legacy" }
+        assertEquals(9.9, migrated.latitude, 0.000001)
+        assertEquals("Bell", migrated.sound)
+        assertFalse(migrated.vibration)
+        assertTrue(app.getSharedPreferences("destination_monitor", Context.MODE_PRIVATE).getBoolean("migrated_to_multi", false))
+        MultiAlarmRuntime.migrateLegacy(app)
+        assertEquals(2, MultiAlarmRuntime.live(app).size)
+        MultiAlarmRuntime.finish(app, "legacy", "completed")
+        MultiAlarmRuntime.forget(app, "legacy")
+        MultiAlarmRuntime.migrateLegacy(app)
+        assertEquals(listOf("other"), MultiAlarmRuntime.live(app).map { it.id })
+    }
+
+    @Test fun oldNotificationStopTargetsItsOwnAlarmAndSnoozeMigrationHasADeadline() {
+        save(entry("other").apply { status = "triggered"; distanceFired = true; triggeredAt = 1L })
+        legacy("triggered")
+        AlarmActionReceiver().onReceive(app, Intent("tracker_alarm.STOP"))
+        assertEquals("other", MultiAlarmRuntime.ringing(app)?.id)
+        assertEquals("completed", MultiAlarmRuntime.states(app).first { it["id"] == "legacy" }["status"])
+        // Reset migration storage to exercise an old snoozed installation.
+        app.getSharedPreferences("destination_monitor", Context.MODE_PRIVATE).edit().clear().commit()
+        save(entry("other"))
+        legacy("snoozed")
+        val now = System.currentTimeMillis()
+        MultiAlarmRuntime.migrateLegacy(app)
+        val snoozed = MultiAlarmRuntime.live(app).first { it.id == "legacy" }
+        assertEquals("snoozed", snoozed.status)
+        assertTrue(snoozed.snoozedUntil in (now + 60_000L)..(System.currentTimeMillis() + 60_000L))
+        assertTrue(snoozed.distanceFired)
+    }
+
+    @Test fun legacyBootMigrationRestoresGpsWithoutStartingPendingPlayback() {
+        legacy("triggered")
+        AlarmRestoreReceiver().onReceive(app, Intent(Intent.ACTION_BOOT_COMPLETED))
+        assertEquals("legacy", MultiAlarmRuntime.ringing(app)?.id)
+        assertTrue(MultiAlarmRuntime.playbackResumeRequired(app))
+        val controller = Robolectric.buildService(MultiTrackingService::class.java).create().startCommand(0, 1)
+        assertEquals(MultiAlarmRuntime.TRACKING_ID, shadowOf(controller.get()).lastForegroundNotificationId)
+        controller.destroy()
+    }
+
+    @Test fun invalidLegacyCoordinatesStayPreservedWithoutPoisoningCurrentAlarms() {
+        save(entry("kept"))
+        legacy()
+        val stored = app.getSharedPreferences("destination_monitor", Context.MODE_PRIVATE)
+        stored.edit().putString("latitude", "NaN").commit()
+        MultiAlarmRuntime.migrateLegacy(app)
+        assertEquals(listOf("kept"), MultiAlarmRuntime.live(app).map { it.id })
+        assertFalse(stored.getBoolean("migrated_to_multi", false))
+        assertEquals("NaN", stored.getString("latitude", null))
+        assertNotNull(MultiAlarmRuntime.storageWarning(app))
+        stored.edit().putString("latitude", "invalid").commit()
+        MultiAlarmRuntime.migrateLegacy(app)
+        assertEquals(listOf("kept"), MultiAlarmRuntime.live(app).map { it.id })
+    }
+
+    @Test fun nativeEventsCoalesceWritesAndCancelWithoutLeavingCallbacks() {
+        save(entry("event"))
+        var events = 0
+        val sink = object : EventChannel.EventSink {
+            override fun success(event: Any?) { events++ }
+            override fun error(code: String, message: String?, details: Any?) { fail(message) }
+            override fun endOfStream() { }
+        }
+        try {
+            AlarmStatusEvents.onListen(null, sink)
+            assertEquals(1, events)
+            MultiAlarmRuntime.rename(app, "event", "One", Result())
+            MultiAlarmRuntime.rename(app, "event", "Two", Result())
+            MultiAlarmRuntime.rename(app, "event", "Three", Result())
+            assertEquals(1, events)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(200))
+            assertEquals(2, events)
+            assertEquals("Three", MultiAlarmRuntime.states(app).single()["label"])
+            AlarmStatusEvents.changed()
+            AlarmStatusEvents.onCancel(null)
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+            assertEquals(2, events)
+        } finally { AlarmStatusEvents.onCancel(null) }
     }
 
     @Test fun fastCrossingRingsBothDestinationsInTravelOrder() {
@@ -149,7 +248,7 @@ class AlarmRuntimeTest {
 
     @Test fun alarmNotificationNeverAddsASecondSoundOrVibration() {
         val notification = MultiAlarmRuntime.alarmNotification(app, entry("quiet"))
-        val channel = AlarmRuntime.notifications(app).getNotificationChannel(AlarmRuntime.CHANNEL_ALARM)
+        val channel = AlarmNotifications.notifications(app).getNotificationChannel(AlarmNotifications.CHANNEL_ALARM)
         assertNull(channel.sound)
         assertFalse(channel.shouldVibrate())
         assertNull(notification.sound)
@@ -176,19 +275,19 @@ class AlarmRuntimeTest {
     }
 
     @Test fun readinessDetectsBlockedAlarmAndTrackingChannels() {
-        val manager = AlarmRuntime.notifications(app)
+        val manager = AlarmNotifications.notifications(app)
         assertTrue(AlarmReadiness.notificationsReady(app))
-        manager.createNotificationChannel(NotificationChannel(AlarmRuntime.CHANNEL_ALARM, "Alarms", NotificationManager.IMPORTANCE_NONE))
+        manager.createNotificationChannel(NotificationChannel(AlarmNotifications.CHANNEL_ALARM, "Alarms", NotificationManager.IMPORTANCE_NONE))
         assertFalse(AlarmReadiness.notificationsReady(app))
         val settings = AlarmReadiness.notificationSettings(app)
         assertEquals(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS, settings.action)
-        assertEquals(AlarmRuntime.CHANNEL_ALARM, settings.getStringExtra(Settings.EXTRA_CHANNEL_ID))
+        assertEquals(AlarmNotifications.CHANNEL_ALARM, settings.getStringExtra(Settings.EXTRA_CHANNEL_ID))
     }
 
     @Test fun readinessChecksTrackingChannelAndWarnsAboutMutedAudio() {
-        val manager = AlarmRuntime.notifications(app)
-        manager.createNotificationChannel(NotificationChannel(AlarmRuntime.CHANNEL_TRACKING, "Tracking", NotificationManager.IMPORTANCE_NONE))
-        assertEquals(AlarmRuntime.CHANNEL_TRACKING, AlarmReadiness.blockedChannel(app))
+        val manager = AlarmNotifications.notifications(app)
+        manager.createNotificationChannel(NotificationChannel(AlarmNotifications.CHANNEL_TRACKING, "Tracking", NotificationManager.IMPORTANCE_NONE))
+        assertEquals(AlarmNotifications.CHANNEL_TRACKING, AlarmReadiness.blockedChannel(app))
         val audio = app.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audio.setStreamVolume(AudioManager.STREAM_ALARM, 0, 0)
         val values = AlarmReadiness.values(app, false)

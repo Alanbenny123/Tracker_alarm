@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -862,9 +860,7 @@ class ActiveAlarmScreen extends ConsumerStatefulWidget {
   ConsumerState<ActiveAlarmScreen> createState() => _ActiveAlarmScreenState();
 }
 
-class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
-    with WidgetsBindingObserver {
-  Timer? timer;
+class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
   bool showMap = false;
 
   Future<void> _editRepeat(String id, int currentDays) async {
@@ -886,40 +882,10 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(locationProvider).refreshAndTrack();
-      ref.read(alarmProvider).syncStatus();
     });
-    _startStatusTimer();
-  }
-
-  void _startStatusTimer() {
-    timer ??= Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => ref.read(alarmProvider).syncStatus(),
-    );
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      ref.read(alarmProvider).syncStatus();
-      _startStatusTimer();
-    } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.detached) {
-      timer?.cancel();
-      timer = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    timer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -1283,44 +1249,8 @@ class AlarmTriggeredScreen extends ConsumerStatefulWidget {
       _AlarmTriggeredScreenState();
 }
 
-class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen>
-    with WidgetsBindingObserver {
-  Timer? _statusTimer;
+class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen> {
   bool _redirecting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(alarmProvider).syncStatus();
-    });
-    _startPolling();
-  }
-
-  void _startPolling() {
-    _statusTimer ??= Timer.periodic(const Duration(seconds: 2), (_) {
-      ref.read(alarmProvider).syncStatus();
-    });
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      ref.read(alarmProvider).syncStatus();
-      _startPolling();
-    } else {
-      _statusTimer?.cancel();
-      _statusTimer = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _statusTimer?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {

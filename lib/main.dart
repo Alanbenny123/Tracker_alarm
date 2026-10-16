@@ -14,6 +14,7 @@ import 'models/place.dart';
 import 'models/travel_mode.dart';
 import 'providers/app_providers.dart';
 import 'services/shared_location_service.dart';
+import 'widgets/alarm_status_listener.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -103,7 +104,10 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
     SharedLocationService.channel.setMethodCallHandler((call) async {
       if (call.method == 'sharedText') await _takeSharedLocation();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _takeSharedLocation());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _takeSharedLocation();
+    });
   }
 
   Future<void> _takeSharedLocation() async {
@@ -179,9 +183,8 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.read(alarmProvider).syncStatus();
       ref.read(locationProvider).refreshAndTrack();
-    } else if (state == AppLifecycleState.paused) {
+    } else if (state != AppLifecycleState.inactive) {
       ref.read(locationProvider).stopVisibleUpdates();
     }
   }
@@ -189,61 +192,64 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
   @override
   Widget build(BuildContext context) {
     final mode = ref.watch(settingsProvider.select((s) => s.theme));
-    return MaterialApp.router(
-      scaffoldMessengerKey: _messengerKey,
-      title: 'Destination Alarm',
-      debugShowCheckedModeBanner: false,
-      theme: createAppTheme(Brightness.light),
-      darkTheme: createAppTheme(Brightness.dark),
-      themeMode: switch (mode) {
-        ThemeModeSetting.light => ThemeMode.light,
-        ThemeModeSetting.dark => ThemeMode.dark,
-        _ => ThemeMode.system,
-      },
-      builder:
-          (context, child) => Stack(
-            children: [
-              child ?? const SizedBox.shrink(),
-              if (_resolvingSharedLocation) ...[
-                const ModalBarrier(dismissible: false, color: Colors.black54),
-                Center(
-                  child: Card(
-                    margin: const EdgeInsets.all(24),
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Semantics(
-                        liveRegion: true,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const CircularProgressIndicator(
-                              semanticsLabel: 'Opening shared location',
-                            ),
-                            const SizedBox(height: 20),
-                            const Text(
-                              'Opening Google Maps location…',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Resolving the shared link. This can take up to 12 seconds.',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 12),
-                            TextButton(
-                              onPressed: _cancelSharedLocation,
-                              child: const Text('Cancel'),
-                            ),
-                          ],
+    return AlarmStatusListener(
+      controller: ref.read(alarmProvider),
+      child: MaterialApp.router(
+        scaffoldMessengerKey: _messengerKey,
+        title: 'Destination Alarm',
+        debugShowCheckedModeBanner: false,
+        theme: createAppTheme(Brightness.light),
+        darkTheme: createAppTheme(Brightness.dark),
+        themeMode: switch (mode) {
+          ThemeModeSetting.light => ThemeMode.light,
+          ThemeModeSetting.dark => ThemeMode.dark,
+          _ => ThemeMode.system,
+        },
+        builder:
+            (context, child) => Stack(
+              children: [
+                child ?? const SizedBox.shrink(),
+                if (_resolvingSharedLocation) ...[
+                  const ModalBarrier(dismissible: false, color: Colors.black54),
+                  Center(
+                    child: Card(
+                      margin: const EdgeInsets.all(24),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Semantics(
+                          liveRegion: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CircularProgressIndicator(
+                                semanticsLabel: 'Opening shared location',
+                              ),
+                              const SizedBox(height: 20),
+                              const Text(
+                                'Opening Google Maps location…',
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Resolving the shared link. This can take up to 12 seconds.',
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: _cancelSharedLocation,
+                                child: const Text('Cancel'),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
-      routerConfig: router,
+            ),
+        routerConfig: router,
+      ),
     );
   }
 }

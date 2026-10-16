@@ -68,7 +68,7 @@ class TestAlarmService : Service() {
             if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, alert,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
             else startForeground(NOTIFICATION_ID, alert)
-            AlarmRuntime.notifications(this).cancel(COUNTDOWN_ID)
+            AlarmNotifications.notifications(this).cancel(COUNTDOWN_ID)
         }, 5_000L)
         handler.postDelayed({ finishTest() }, 15_000L)
         return START_NOT_STICKY
@@ -81,7 +81,7 @@ class TestAlarmService : Service() {
         val open = PendingIntent.getActivity(this, 72, Intent(this, TestAlarmActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this,
-            if (ringing) AlarmRuntime.CHANNEL_ALARM else AlarmRuntime.CHANNEL_TRACKING)
+            if (ringing) AlarmNotifications.CHANNEL_ALARM else AlarmNotifications.CHANNEL_TRACKING)
             else Notification.Builder(this)
         builder.setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(if (ringing) "Test alarm" else "Test alarm in 5 seconds")
@@ -100,8 +100,8 @@ class TestAlarmService : Service() {
         sound.stop()
         ringing = false
         if (wakeLock.isHeld) wakeLock.release()
-        AlarmRuntime.notifications(this).cancel(NOTIFICATION_ID)
-        AlarmRuntime.notifications(this).cancel(COUNTDOWN_ID)
+        AlarmNotifications.notifications(this).cancel(NOTIFICATION_ID)
+        AlarmNotifications.notifications(this).cancel(COUNTDOWN_ID)
         stopForeground(STOP_FOREGROUND_REMOVE)
         if (running === this) running = null
         stopSelf()

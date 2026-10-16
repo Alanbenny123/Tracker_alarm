@@ -167,13 +167,15 @@ object MultiAlarmRuntime {
     @Synchronized private fun write(context: Context, entries: List<Entry>): Boolean {
         val array = JSONArray()
         entries.forEach { array.put(it.json()) }
-        return prefs(context).edit().putString(KEY, array.toString())
+        val saved = prefs(context).edit().putString(KEY, array.toString())
             .putString("last_good_alarms", array.toString()).commit()
+        if (saved) AlarmStatusEvents.changed()
+        return saved
     }
 
     @Synchronized fun storageWarning(context: Context): String? {
         read(context)
-        return prefs(context).getString("storage_warning", null)
+        return prefs(context).getString("storage_warning", null) ?: LegacyAlarmMigration.problem(context)
     }
 
     @Synchronized fun clearFinished(context: Context): Boolean =
@@ -280,27 +282,15 @@ object MultiAlarmRuntime {
         if (changed) write(context, entries)
     }
 
-    private fun migrateLegacy(context: Context) {
-        val legacy = AlarmRuntime.state(context) ?: return
-        val status = AlarmRuntime.prefs(context).getString("status", "inactive")
-        if (status != "active" && status != "triggered" && status != "snoozed") return
-        val id = legacy["id"] as String
+    /** Storage-only migration: callers decide when Android permits playback. */
+    @Synchronized fun migrateLegacy(context: Context) {
+        val entry = LegacyAlarmMigration.readEntry(context) ?: return
         val entries = read(context)
-        if (entries.none { it.id == id }) {
-            entries.add(Entry(
-                id, legacy["name"] as String, legacy["address"] as String,
-                legacy["latitude"] as Double, legacy["longitude"] as Double,
-                (legacy["radius"] as Double).toFloat(), legacy["vibration"] as Boolean,
-                legacy["sound"] as String, legacy["startedAt"] as Long,
-                legacy["alertAt"] as? Long ?: 0L, status ?: "active",
-                legacy["timeFired"] as Boolean, legacy["distanceFired"] as Boolean,
-                legacy["triggerReason"] as String,
-            ))
+        if (entries.none { it.id == entry.id }) {
+            entries.add(entry)
             if (!write(context, entries)) return
         }
-        AlarmRuntime.finish(context, "cancelled")
-        refresh(context)
-        ensureGeofences(context)
+        LegacyAlarmMigration.retire(context)
     }
 
     @Synchronized fun register(context: Context, args: Map<String, Any>, result: MethodChannel.Result) {
@@ -641,6 +631,7 @@ object MultiAlarmRuntime {
     fun playbackResumeRequired(context: Context) = prefs(context).getBoolean("playback_resume_required", false)
     fun setPlaybackResumeRequired(context: Context, required: Boolean) {
         prefs(context).edit().putBoolean("playback_resume_required", required).commit()
+        AlarmStatusEvents.changed()
     }
 
     private fun addGeofence(context: Context, entry: Entry) {
@@ -658,12 +649,16 @@ object MultiAlarmRuntime {
             client.addGeofences(request, geofenceIntent(context))
                 .addOnSuccessListener {
                     geofenceStatus[entry.id] = "Registered"
+                    AlarmStatusEvents.changed()
                     if (live(context).none { it.id == entry.id && !it.distanceFired &&
                             it.distanceReady(System.currentTimeMillis()) }) {
                         removeGeofence(context, entry.id)
                     }
                 }
-                .addOnFailureListener { geofenceStatus[entry.id] = "Unavailable: ${it.message ?: "registration failed"}" }
+                .addOnFailureListener {
+                    geofenceStatus[entry.id] = "Unavailable: ${it.message ?: "registration failed"}"
+                    AlarmStatusEvents.changed()
+                }
         } catch (e: Exception) {
             geofenceStatus[entry.id] = "Unavailable: ${e.message ?: "registration failed"}"
         }
@@ -703,13 +698,14 @@ object MultiAlarmRuntime {
     }
 
     fun refresh(context: Context, strict: Boolean = false) {
+        AlarmStatusEvents.changed()
         scheduleNext(context, read(context))
         val service = Intent(context, MultiTrackingService::class.java)
         if (live(context).isEmpty()) {
             previousFix = null
             context.stopService(service)
-            AlarmRuntime.notifications(context).cancel(TRACKING_ID)
-            AlarmRuntime.notifications(context).cancel(ALARM_ID)
+            AlarmNotifications.notifications(context).cancel(TRACKING_ID)
+            AlarmNotifications.notifications(context).cancel(ALARM_ID)
         } else {
             // Dispatch to the existing foreground service immediately. A geofence
             // or notification action must not wait for the next GPS fix or UI resume.
@@ -721,9 +717,9 @@ object MultiAlarmRuntime {
                 if (strict) throw e
                 val ringing = ringing(context)
                 if (ringing != null) {
-                    AlarmRuntime.notifications(context).notify(ALARM_ID, alarmNotification(context, ringing))
+                    AlarmNotifications.notifications(context).notify(ALARM_ID, alarmNotification(context, ringing))
                 } else {
-                    AlarmRuntime.notifications(context).notify(TRACKING_ID, trackingNotification(context, live(context).size))
+                    AlarmNotifications.notifications(context).notify(TRACKING_ID, trackingNotification(context, live(context).size))
                 }
             }
         }
@@ -735,7 +731,7 @@ object MultiAlarmRuntime {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     fun alarmNotification(context: Context, entry: Entry): Notification {
-        AlarmRuntime.notifications(context)
+        AlarmNotifications.notifications(context)
         val waiting = live(context).count { it.status == "triggered" && it.id != entry.id }
         val open = PendingIntent.getActivity(context, 42,
             Intent(context, MainActivity::class.java).setAction("tracker_alarm.ALARM")
@@ -745,7 +741,7 @@ object MultiAlarmRuntime {
             Intent(context, LockedAlarmActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        return builder(context, AlarmRuntime.CHANNEL_ALARM)
+        return builder(context, AlarmNotifications.CHANNEL_ALARM)
             .setSound(null).setVibrate(null).setOnlyAlertOnce(true)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(when (entry.triggerReason) { "time" -> "Time alarm"; "both" -> "Time and distance alarm"; else -> "Destination nearby" })
@@ -761,10 +757,10 @@ object MultiAlarmRuntime {
     }
 
     fun trackingNotification(context: Context, count: Int, message: String? = null): Notification {
-        AlarmRuntime.notifications(context)
+        AlarmNotifications.notifications(context)
         val open = PendingIntent.getActivity(context, 46, Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        return builder(context, AlarmRuntime.CHANNEL_TRACKING)
+        return builder(context, AlarmNotifications.CHANNEL_TRACKING)
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setContentTitle("Destination alarms active")
             .setContentText(message ?: "Monitoring $count destination${if (count == 1) "" else "s"}")

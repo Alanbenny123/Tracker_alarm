@@ -51,6 +51,7 @@ class _DestinationPickerScreenState
   String? emptyPlaceQuery;
   bool stopsLoaded = false;
   String? queryHint;
+  String? transitNotice;
 
   @override
   void initState() {
@@ -91,6 +92,7 @@ class _DestinationPickerScreenState
     emptyPlaceQuery = null;
     stopsLoaded = false;
     queryHint = null;
+    transitNotice = null;
   }
 
   void _queryChanged(String _) {
@@ -195,6 +197,7 @@ class _DestinationPickerScreenState
         stops = found;
         loadingStops = false;
         stopsLoaded = true;
+        transitNotice = stopsService.notice;
       });
     } catch (e) {
       if (!mounted || generation != searchGeneration) return;
@@ -344,6 +347,11 @@ class _DestinationPickerScreenState
                   ),
                   if (searching) const LinearProgressIndicator(),
                   if (loadingStops) const LinearProgressIndicator(),
+                  if (transitNotice != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(transitNotice!),
+                    ),
                   if (queryHint != null || emptyPlaceQuery != null)
                     Padding(
                       padding: const EdgeInsets.all(12),

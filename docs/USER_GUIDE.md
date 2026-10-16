@@ -23,6 +23,12 @@ Use the search box to find an area, then select a result. The app loads stops ar
 
 If no places match your search, check the spelling or search a nearby town or landmark. Enter at least three characters. An empty stop list means no named stops for that transport were found within the displayed radius; try another area or use **Other** to select a map point.
 
+### Search cache and busy servers
+
+No server account or API key is needed for the current public stop search. If a server asks the app to slow down, follow the displayed cooldown before retrying. Retry cannot bypass it. A temporary server error gets at most one automatic retry.
+
+Stop results are reused for ten minutes across picker visits. If refreshing fails, the app can show previously loaded results for the **same area and transport**, up to 24 hours old, with a visible cache-age notice. These may be out of date. This cache lives only in memory and disappears when Android ends the app process; it does not download a map. Public services can still be unavailable. You can use **Other** to choose a map point, then start the offline GPS alarm.
+
 ## Share a place from Google Maps
 
 In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen (up to 12 seconds), or tap Cancel. Then review the destination in setup. If the link contains no usable coordinates, the app may open place search so you can select the correct result. A shortened Google Maps link needs internet to resolve. Google Maps' downloaded offline maps cannot be imported into this app.
@@ -32,6 +38,8 @@ In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. W
 Repeat runs the distance alarm **only on the weekdays you select**. After it rings on one selected day, it resets for the next selected day. You can edit the days using **Repeat alarm** on the active screen. With Repeat off, the alarm is one-time.
 
 You can have up to **10 active alarms**. On the active screen, tap **Add another alarm for this destination** to make another alarm for the same place. To target a different place, return to Home and choose a new destination. Each alarm has its own distance and repeat settings. Tap **Alarms** in the bottom navigation to see all active alarms, including scheduled repeats. The badge shows how many you have. Tap an alarm to view or end it, or pull down on the list to refresh it.
+
+Changes made from notifications update the open app through native status events. Returning to the app refreshes anything missed while it was in the background. You can still pull down the Alarms list to refresh manually.
 
 When an alarm rings, use the app or its notification to handle it. **Snooze** pauses the sound for the offered interval; **End trip** or **Stop alarm** ends that alarm. Other active alarms remain in place.
 
@@ -79,3 +87,7 @@ Manual battery confirmation, for phones whose vendor setting Android cannot veri
 ## Local data
 
 The latest 100 trips are kept locally. **Clear trip history** in History or Settings removes trips and their recovery copies. **Clear saved places** removes bookmarks and their recovery copies. Active alarms are kept. Settings also lets you delete damaged recovery copies after reviewing any repaired data. App data is excluded from Android cloud backup and device transfer; this does not delete backups made by older app versions.
+
+## Updating an older installation
+
+Old destination alarms are moved into the current alarm engine without replacing other destinations. Check **Alarms** after updating. If older saved data cannot be read, Settings shows a warning and preserves the original data; recreate that missing destination. An old snoozed alarm whose expiry was not saved receives a new one-minute snooze. After reboot, open the app if the notification says a pending alert needs attention.

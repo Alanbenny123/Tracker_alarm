@@ -14,10 +14,12 @@ Implemented in batch 2:
 
 Batch 2 verification: `flutter analyze` reported no issues; all 72 Flutter tests passed. Added coverage includes a 320 × 480 screen with large text, repeat/sound/unit/snooze choices, empty searches, map retry and recovery after panning. No APK was built or installed.
 
-Remaining recommendations, in the original order:
+Implemented in batch 3:
 
-7. Replace duplicate UI polling with native status events.
-8. Provide a dependable transit-search backend before wider distribution.
-9. Consolidate the legacy single-alarm engine and the multiple-alarm engine.
+7. **Native status events:** one lifecycle-managed subscription for all routes replaces screen polling. Android coalesces storage/GPS/health/geofence invalidations. A serialized snapshot queue prevents events arriving during a read from being lost. Reconnecting refreshes missed state; manual refresh remains available.
+8. **Server-free transit resilience (scope adjusted by the user):** no hosting, rented server or new account. A bounded memory cache survives picker visits; fresh entries last ten minutes and labeled fallback results expire after 24 hours. Rate limits have a shared cooldown of at least 30 seconds and honor Retry-After. One bounded retry remains for transient server errors. Canceled retries stop, and incomplete responses cannot become successful empty results. **The original recommendation for a dependable hosted backend is not implemented:** the user declined hosting, so public-server outages and capacity remain a limitation before wider distribution.
+9. **One alarm engine:** removed the old single-alarm runtime and trackers. Read-only migration plus small old-component bridges preserve installed alarm data and Android callbacks; all scheduling, GPS and destination playback now use the current multiple-alarm engine. Shared channels live in AlarmNotifications. Migration is idempotent, reports invalid old data, preserves flags and prevents completed alarms from resurrecting. Old snoozes lacking a stored deadline receive a one-minute replacement.
+
+Batch 3 verification: `flutter analyze` reported no issues; all 79 Flutter tests and all 29 Android JVM tests passed. Android Kotlin compilation also succeeded. Regression coverage includes event subscription lifecycle and ordering, an idle ringing screen with no polling, cache expiry and cooldowns, incomplete search responses, cancellation during retry, migration without resurrection, old notification targeting, and migration at reboot. No APK was built or installed. Locked-screen travel and installed-version upgrade checks remain physical-device checks.
 
 Each implementation batch stops after three improvements. No APK is built unless explicitly requested. Physical lock-screen and travel tests remain necessary after installation.

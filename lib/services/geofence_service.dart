@@ -70,6 +70,11 @@ class AlarmRequirements {
 
 class GeofenceService {
   static const _channel = MethodChannel('tracker_alarm/geofence');
+  static const _events = EventChannel('tracker_alarm/status');
+
+  /// Native invalidations; each subscriber reads one consistent current snapshot.
+  Stream<void> get statusChanges =>
+      _events.receiveBroadcastStream().map((_) {});
 
   Future<List<Map<String, dynamic>>> multiStates() async {
     final states =
@@ -150,36 +155,9 @@ class GeofenceService {
   Future<void> multiTrigger(String id) =>
       _channel.invokeMethod<void>('multiTrigger', {'id': id});
 
-  Future<void> register(DestinationAlarm alarm) =>
-      _channel.invokeMethod<void>('register', {
-        'id': alarm.id,
-        'name': alarm.place.name,
-        'address': alarm.place.address,
-        'latitude': alarm.place.latitude,
-        'longitude': alarm.place.longitude,
-        'radius': alarm.radius,
-        'vibration': alarm.vibration,
-        'sound': alarm.sound,
-        'startedAt': alarm.startedAt.millisecondsSinceEpoch,
-        'alertAt': alarm.alertAt?.millisecondsSinceEpoch,
-      });
-
-  Future<void> cancel() => _channel.invokeMethod<void>('cancel');
-  Future<void> ensure() => _channel.invokeMethod<void>('ensure');
-  Future<void> resumeTriggered() =>
-      _channel.invokeMethod<void>('resumeTriggered');
-  Future<void> stop() => _channel.invokeMethod<void>('stop');
-  Future<void> dismissCurrent() =>
-      _channel.invokeMethod<void>('dismissCurrent');
-  Future<void> trigger() => _channel.invokeMethod<void>('trigger');
-  Future<void> snooze(int minutes) =>
-      _channel.invokeMethod<void>('snooze', {'minutes': minutes});
+  // Read-only migration support for pre-multiple-alarm installations.
   Future<String> status() async =>
       await _channel.invokeMethod<String>('status') ?? 'inactive';
-  Future<Map<String, dynamic>?> state() async {
-    final value = await _channel.invokeMethod<Map<dynamic, dynamic>>('state');
-    return value == null ? null : Map<String, dynamic>.from(value);
-  }
 
   Future<AlarmRequirements> requirements() async {
     final value = await _channel.invokeMethod<Map<dynamic, dynamic>>(

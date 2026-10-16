@@ -7,8 +7,15 @@ import '../models/place.dart';
 import '../models/travel_mode.dart';
 
 class TransitStopsService {
-  TransitStopsService({HttpClient Function()? clientFactory})
-    : _clientFactory = clientFactory ?? HttpClient.new;
+  TransitStopsService({
+    HttpClient Function()? clientFactory,
+    TransitStopsCache? cache,
+  }) : _clientFactory = clientFactory ?? HttpClient.new,
+       _cache = cache ?? _sharedCache;
+
+  static final _sharedCache = TransitStopsCache();
+  final TransitStopsCache _cache;
+  String? notice;
 
   final HttpClient Function() _clientFactory;
   _StopLookup? _lookup;
@@ -21,7 +28,6 @@ class TransitStopsService {
     lookup.client.close(force: true);
   }
 
-  final Map<String, (DateTime, List<Place>)> _cache = {};
   static const _endpoint = 'https://overpass-api.de/api/interpreter';
 
   Future<List<Place>> nearby(
@@ -30,37 +36,68 @@ class TransitStopsService {
     double longitude,
   ) async {
     cancel();
+    notice = null;
+    if (!latitude.isFinite ||
+        !longitude.isFinite ||
+        latitude < -90 ||
+        latitude > 90 ||
+        longitude < -180 ||
+        longitude > 180) {
+      throw const TransitStopsException('Choose a valid map location.');
+    }
     if (!mode.usesStops) return [];
     final cacheKey =
-        '${mode.name}:${(latitude * 1000).round()}:${(longitude * 1000).round()}';
-    final cached = _cache[cacheKey];
+        '${mode.name}:${latitude.toStringAsFixed(4)}:${longitude.toStringAsFixed(4)}';
+    final cached = _cache.read(cacheKey);
     if (cached != null &&
-        DateTime.now().difference(cached.$1) < const Duration(minutes: 10)) {
+        _cache.now().difference(cached.$1) < const Duration(minutes: 10)) {
       return cached.$2;
+    }
+    final retryAt = _cache.retryAt;
+    if (retryAt != null && retryAt.isAfter(_cache.now())) {
+      if (cached != null && cached.$2.isNotEmpty) return _useSaved(cached);
+      final seconds = retryAt.difference(_cache.now()).inSeconds + 1;
+      throw TransitStopsException(
+        'Stop search is cooling down. Retry in $seconds seconds.',
+      );
     }
     final lookup = _StopLookup(_clientFactory());
     _lookup = lookup;
     lookup.client.connectionTimeout = const Duration(seconds: 12);
     try {
       final places = await Future.any([
-        _search(lookup.client, mode, latitude, longitude),
+        _search(lookup, mode, latitude, longitude),
         lookup.cancelled.future,
       ]).timeout(const Duration(seconds: 50));
       if (!identical(_lookup, lookup)) return [];
-      _cache[cacheKey] = (DateTime.now(), places);
+      _cache.save(cacheKey, places);
       return places;
     } on TimeoutException {
+      if (!identical(_lookup, lookup)) return [];
+      if (cached != null && cached.$2.isNotEmpty) return _useSaved(cached);
       throw const TransitStopsException(
         'Stop search timed out. Retry in a moment.',
       );
+    } on TransitStopsException {
+      if (!identical(_lookup, lookup)) return [];
+      if (cached != null && cached.$2.isNotEmpty) return _useSaved(cached);
+      rethrow;
     } finally {
+      if (!lookup.cancelled.isCompleted) lookup.cancelled.complete([]);
       lookup.client.close(force: true);
       if (identical(_lookup, lookup)) _lookup = null;
     }
   }
 
+  List<Place> _useSaved((DateTime, List<Place>) cached) {
+    final minutes = _cache.now().difference(cached.$1).inMinutes;
+    notice =
+        'Showing cached stops from $minutes minutes ago. Search is unavailable; stop data may have changed.';
+    return cached.$2;
+  }
+
   Future<List<Place>> _search(
-    HttpClient client,
+    _StopLookup lookup,
     TravelMode mode,
     double latitude,
     double longitude,
@@ -80,10 +117,12 @@ class TransitStopsService {
             'nwr["public_transport"="station"]["train"="yes"](around:$radius,$latitude,$longitude);',
       TravelMode.other => '',
     };
-    final query = '[out:json][timeout:15];($filter);out center 200;';
+    final namedFilter = filter.replaceAll('(around:', '["name"](around:');
+    final query = '[out:json][timeout:15];($namedFilter);out center 200;';
     try {
       for (var attempt = 0; attempt < 2; attempt++) {
-        final request = await client
+        if (lookup.cancelled.isCompleted) return [];
+        final request = await lookup.client
             .postUrl(Uri.parse(_endpoint))
             .timeout(const Duration(seconds: 12));
         request.headers.contentType = ContentType(
@@ -102,7 +141,37 @@ class TransitStopsService {
         );
         if (response.statusCode != HttpStatus.ok) {
           final status = response.statusCode;
+          if (status == HttpStatus.tooManyRequests ||
+              status == HttpStatus.notAcceptable) {
+            final retry = response.headers.value(HttpHeaders.retryAfterHeader);
+            final seconds = int.tryParse(retry ?? '');
+            DateTime? deadline;
+            if (seconds != null && seconds >= 0) {
+              deadline = _cache.now().add(Duration(seconds: seconds));
+            }
+            if (deadline == null && retry != null) {
+              try {
+                deadline = HttpDate.parse(retry);
+              } on FormatException {
+                /* Use the minimum cooldown. */
+              }
+            }
+            final minimum = _cache.now().add(const Duration(seconds: 30));
+            _cache.retryAt =
+                deadline != null && deadline.isAfter(minimum)
+                    ? deadline
+                    : minimum;
+          }
           await response.drain<void>().timeout(const Duration(seconds: 3));
+          if ((status == HttpStatus.tooManyRequests ||
+                  status == HttpStatus.notAcceptable) &&
+              _cache.retryAt != null) {
+            final seconds =
+                _cache.retryAt!.difference(_cache.now()).inSeconds + 1;
+            throw TransitStopsException(
+              'Stop search is busy. Retry in $seconds seconds.',
+            );
+          }
           if (attempt == 0 &&
               (status == HttpStatus.badGateway ||
                   status == HttpStatus.serviceUnavailable ||
@@ -123,7 +192,15 @@ class TransitStopsService {
             );
           }
         }
-        final places = parseTransitStops(jsonDecode(utf8.decode(bytes)), mode);
+        final body = jsonDecode(utf8.decode(bytes));
+        if (body is! Map ||
+            body['elements'] is! List ||
+            body['remark'] != null) {
+          throw const TransitStopsException(
+            'Stop search returned incomplete results. Retry later.',
+          );
+        }
+        final places = parseTransitStops(body, mode);
         places.sort(
           (a, b) => _roughDistanceMetresTo(
             latitude,
@@ -165,7 +242,30 @@ class TransitStopsService {
 
   void dispose() {
     cancel();
-    _cache.clear();
+  }
+}
+
+/// Bounded process-memory cache shared across picker visits. Nothing is uploaded
+/// or written to disk, and expired results cannot be used indefinitely offline.
+class TransitStopsCache {
+  TransitStopsCache({DateTime Function()? clock}) : now = clock ?? DateTime.now;
+  final DateTime Function() now;
+  final _entries = <String, (DateTime, List<Place>)>{};
+  DateTime? retryAt;
+
+  (DateTime, List<Place>)? read(String key) {
+    _entries.removeWhere(
+      (_, value) => now().difference(value.$1) >= const Duration(hours: 24),
+    );
+    return _entries[key];
+  }
+
+  void save(String key, List<Place> places) {
+    _entries.remove(key);
+    _entries[key] = (now(), List<Place>.unmodifiable(places));
+    while (_entries.length > 64) {
+      _entries.remove(_entries.keys.first);
+    }
   }
 }
 
@@ -181,7 +281,9 @@ String _statusMessage(int status) => switch (status) {
   HttpStatus.badGateway ||
   HttpStatus.serviceUnavailable ||
   HttpStatus.gatewayTimeout => 'Stop search server is busy. Retry in a moment.',
-  HttpStatus.badRequest || HttpStatus.notAcceptable =>
+  HttpStatus.notAcceptable =>
+    'Stop search asked us to wait. Retry after 30 seconds.',
+  HttpStatus.badRequest =>
     'Stop search request was rejected. Please update the app.',
   _ => 'Stop search is unavailable (HTTP $status). Retry later.',
 };

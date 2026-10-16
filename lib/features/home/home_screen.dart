@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -25,19 +23,13 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late int index;
-  Timer? _statusTimer;
   @override
   void initState() {
     super.initState();
     index = widget.initialIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(locationProvider).refreshAndTrack();
-      ref.read(alarmProvider).syncStatus();
     });
-    _statusTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => ref.read(alarmProvider).syncStatus(),
-    );
   }
 
   @override
@@ -46,12 +38,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (oldWidget.initialIndex != widget.initialIndex) {
       index = widget.initialIndex;
     }
-  }
-
-  @override
-  void dispose() {
-    _statusTimer?.cancel();
-    super.dispose();
   }
 
   @override

@@ -21,24 +21,24 @@ class BatteryConfirmation {
 
 object AlarmReadiness {
     fun blockedChannel(context: Context): String? {
-        val manager = AlarmRuntime.notifications(context)
+        val manager = AlarmNotifications.notifications(context)
         if (Build.VERSION.SDK_INT < 26) return null
-        if ((manager.getNotificationChannel(AlarmRuntime.CHANNEL_ALARM)?.importance ?: 0) < NotificationManager.IMPORTANCE_HIGH)
-            return AlarmRuntime.CHANNEL_ALARM
-        if ((manager.getNotificationChannel(AlarmRuntime.CHANNEL_TRACKING)?.importance ?: 0) == NotificationManager.IMPORTANCE_NONE)
-            return AlarmRuntime.CHANNEL_TRACKING
+        if ((manager.getNotificationChannel(AlarmNotifications.CHANNEL_ALARM)?.importance ?: 0) < NotificationManager.IMPORTANCE_HIGH)
+            return AlarmNotifications.CHANNEL_ALARM
+        if ((manager.getNotificationChannel(AlarmNotifications.CHANNEL_TRACKING)?.importance ?: 0) == NotificationManager.IMPORTANCE_NONE)
+            return AlarmNotifications.CHANNEL_TRACKING
         return null
     }
 
     fun notificationsReady(context: Context): Boolean {
-        val manager = AlarmRuntime.notifications(context)
+        val manager = AlarmNotifications.notifications(context)
         return manager.areNotificationsEnabled() &&
             (Build.VERSION.SDK_INT < 33 || context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
             blockedChannel(context) == null
     }
 
     fun fullScreenReady(context: Context): Boolean = Build.VERSION.SDK_INT < 34 ||
-        AlarmRuntime.notifications(context).canUseFullScreenIntent()
+        AlarmNotifications.notifications(context).canUseFullScreenIntent()
 
     fun notificationSettings(context: Context): Intent {
         val channel = blockedChannel(context)
@@ -55,7 +55,7 @@ object AlarmReadiness {
 
     fun values(context: Context, manualBattery: Boolean): Map<String, Any> {
         val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        val manager = AlarmRuntime.notifications(context)
+        val manager = AlarmNotifications.notifications(context)
         val warnings = mutableListOf<String>()
         if (audio.getStreamVolume(AudioManager.STREAM_ALARM) == 0)
             warnings.add("Alarm volume is zero. Raise alarm volume to hear the alert.")

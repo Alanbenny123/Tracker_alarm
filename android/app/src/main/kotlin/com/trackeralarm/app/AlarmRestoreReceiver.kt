@@ -14,6 +14,7 @@ class AlarmRestoreReceiver : BroadcastReceiver() {
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
             AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED -> {
+                MultiAlarmRuntime.migrateLegacy(context)
                 MultiAlarmRuntime.realignClock(context)
                 if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
                     // Restore GPS first. Android 15+ forbids media playback FGS

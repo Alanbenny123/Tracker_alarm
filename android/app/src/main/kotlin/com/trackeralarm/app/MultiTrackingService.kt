@@ -132,6 +132,7 @@ class MultiTrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         running = this
+        AlarmStatusEvents.changed()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -160,6 +161,7 @@ class MultiTrackingService : Service() {
     }
 
     private fun syncRuntime(): Boolean {
+        AlarmStatusEvents.changed()
         val live = MultiAlarmRuntime.live(this)
         if (live.isEmpty()) {
             stopUpdates()
@@ -174,7 +176,7 @@ class MultiTrackingService : Service() {
                 startForeground(MultiAlarmRuntime.ALARM_ID, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
             } else startForeground(MultiAlarmRuntime.ALARM_ID, notification)
-            AlarmRuntime.notifications(this).cancel(MultiAlarmRuntime.TRACKING_ID)
+            AlarmNotifications.notifications(this).cancel(MultiAlarmRuntime.TRACKING_ID)
             if (ringingId != ringing.id) {
                 sound.stop()
                 TestAlarmService.stop(this)
@@ -188,7 +190,7 @@ class MultiTrackingService : Service() {
                 startForeground(MultiAlarmRuntime.TRACKING_ID, notification,
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else startForeground(MultiAlarmRuntime.TRACKING_ID, notification)
-            AlarmRuntime.notifications(this).cancel(MultiAlarmRuntime.ALARM_ID)
+            AlarmNotifications.notifications(this).cancel(MultiAlarmRuntime.ALARM_ID)
             if (ringingId != null) {
                 sound.stop()
                 ringingId = null
@@ -226,7 +228,7 @@ class MultiTrackingService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Could not subscribe to background GPS", e)
             releaseWakeLock()
-            AlarmRuntime.notifications(this).notify(MultiAlarmRuntime.TRACKING_ID,
+            AlarmNotifications.notifications(this).notify(MultiAlarmRuntime.TRACKING_ID,
                 MultiAlarmRuntime.trackingNotification(this, MultiAlarmRuntime.live(this).size))
         }
     }
@@ -248,6 +250,7 @@ class MultiTrackingService : Service() {
         stopUpdates()
         releaseWakeLock()
         sound.stop()
+        AlarmStatusEvents.changed()
         super.onDestroy()
     }
 }

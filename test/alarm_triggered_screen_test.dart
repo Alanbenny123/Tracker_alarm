@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,11 +7,15 @@ import 'package:go_router/go_router.dart';
 import 'package:tracker_alarm/features/alarm/alarm_screens.dart';
 import 'package:tracker_alarm/main.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
+import 'package:tracker_alarm/widgets/alarm_status_listener.dart';
 
 import 'helpers/alarm_fakes.dart';
 
 class _CountingNative extends FakeNative {
   int polls = 0;
+  final events = StreamController<void>.broadcast(sync: true);
+  @override
+  Stream<void> get statusChanges => events.stream;
   @override
   Future<void> multiSnooze(String id, int minutes) async {
     entry(id)['status'] = 'snoozed';
@@ -92,15 +98,21 @@ void main() {
       await tester.pumpWidget(_app(controller, router));
       await tester.pump();
       expect(find.text('Station A'), findsOneWidget);
+      await tester.pumpAndSettle();
+      final beforeIdle = native.polls;
+      await tester.pump(const Duration(seconds: 10));
+      expect(native.polls, beforeIdle); // No route-level polling timer.
 
       // Native notification controls act while Flutter's ringing page is visible.
       await native.multiDismiss(first);
       await native.multiTrigger(second);
+      native.events.add(null);
       await tester.pump(const Duration(seconds: 2));
       await tester.pump();
       expect(find.text('Station B'), findsOneWidget);
       expect(find.text('Station A'), findsNothing);
       await native.multiDismiss(second);
+      native.events.add(null);
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
       expect(find.text('Home'), findsOneWidget);
@@ -111,7 +123,7 @@ void main() {
   );
 
   testWidgets(
-    'polling pauses in background and syncs snooze immediately on resume',
+    'event subscription pauses in background and syncs snooze on resume',
     (tester) async {
       final storage = MemoryStorage();
       final native = _CountingNative();
@@ -170,15 +182,18 @@ Widget _app(
   double textScale = 1,
 }) => ProviderScope(
   overrides: [alarmProvider.overrideWith((ref) => controller)],
-  child: MaterialApp.router(
-    theme: createAppTheme(Brightness.light),
-    builder:
-        (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(textScale)),
-          child: child!,
-        ),
-    routerConfig: router,
+  child: AlarmStatusListener(
+    controller: controller,
+    child: MaterialApp.router(
+      theme: createAppTheme(Brightness.light),
+      builder:
+          (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+      routerConfig: router,
+    ),
   ),
 );

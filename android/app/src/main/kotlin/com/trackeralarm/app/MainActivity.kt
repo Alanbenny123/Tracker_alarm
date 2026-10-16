@@ -12,6 +12,7 @@ import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.plugin.common.EventChannel
 import java.util.Locale
 
 class MainActivity : FlutterActivity() {
@@ -23,6 +24,7 @@ class MainActivity : FlutterActivity() {
         super.onPause()
     }
 
+    private var statusChannel: EventChannel? = null
     private var shareChannel: MethodChannel? = null
     private var pendingSharedText: String? = null
 
@@ -45,6 +47,8 @@ class MainActivity : FlutterActivity() {
     }
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        statusChannel = EventChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/status")
+        statusChannel?.setStreamHandler(AlarmStatusEvents)
         shareChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/share")
         shareChannel?.setMethodCallHandler { call, result ->
             if (call.method == "takePendingShare") {
@@ -110,6 +114,7 @@ class MainActivity : FlutterActivity() {
                     MultiAlarmRuntime.register(this, args, result)
                 }
                 "multiEnsure" -> {
+                    MultiAlarmRuntime.migrateLegacy(this)
                     MultiAlarmRuntime.setPlaybackResumeRequired(this, false)
                     MultiAlarmRuntime.refresh(this)
                     MultiAlarmRuntime.ensureGeofences(this)
@@ -143,37 +148,7 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
-                "register" -> {
-                    if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
-                        (Build.VERSION.SDK_INT >= 29 && checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED)) {
-                        result.error("permission", "Precise and background location permission are required for geofencing.", null)
-                        return@setMethodCallHandler
-                    }
-                    @Suppress("UNCHECKED_CAST")
-                    val args = call.arguments as? Map<String, Any> ?: run {
-                        result.error("arguments", "Missing destination", null); return@setMethodCallHandler
-                    }
-                    AlarmRuntime.register(this, args, result)
-                }
-                "cancel" -> AlarmRuntime.finish(this, "cancelled", result)
-                "stop" -> AlarmRuntime.finish(this, "completed", result)
-                "dismissCurrent" -> AlarmRuntime.dismissCurrent(this, result)
-                "ensure" -> AlarmRuntime.ensure(this, result)
-                "resumeTriggered" -> {
-                    AlarmRuntime.resumeTriggered(this)
-                    result.success(null)
-                }
-                "trigger" -> {
-                    AlarmRuntime.trigger(this)
-                    result.success(null)
-                }
-                "snooze" -> {
-                    val minutes = call.argument<Int>("minutes") ?: 1
-                    AlarmRuntime.snooze(this, minutes)
-                    result.success(null)
-                }
-                "status" -> result.success(AlarmRuntime.prefs(this).getString("status", "inactive"))
-                "state" -> result.success(AlarmRuntime.state(this))
+                "status" -> result.success(LegacyAlarmMigration.status(this))
                 "requirements" -> result.success(AlarmReadiness.values(this, batteryConfirmation.valid()))
                 "openNotificationSettings" -> {
                     try {
@@ -266,6 +241,9 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        statusChannel?.setStreamHandler(null)
+        AlarmStatusEvents.onCancel(null)
+        statusChannel = null
         shareChannel?.setMethodCallHandler(null)
         shareChannel = null
         super.cleanUpFlutterEngine(flutterEngine)
