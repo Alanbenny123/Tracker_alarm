@@ -33,6 +33,8 @@ Stop results are reused for ten minutes across picker visits. If refreshing fail
 
 In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen (up to 12 seconds), or tap Cancel. Then review the destination in setup. If the link contains no usable coordinates, the app may open place search so you can select the correct result. A shortened Google Maps link needs internet to resolve. Google Maps' downloaded offline maps cannot be imported into this app. When a link contains only a place name or map camera center, the app searches the full resolved place/address instead of guessing a destination from the camera coordinates. Check the result name and map pin before confirming.
 
+If opening a shared link fails, use **Retry** on the error message. A connection failure will not automatically search only a generic business name. The app can use Google Public DNS over HTTPS as a fallback for Google short-link hostnames; it keeps normal HTTPS checks and does not change your phone’s DNS settings. This needs internet, but no API key or rented server. Shared-address results that clearly disagree with the shared name/address are hidden. Always check the selected pin, because geocoding can still be approximate.
+
 ## Repeat and multiple alarms
 
 Repeat runs the distance alarm **only on the weekdays you select**. After it rings on one selected day, it resets for the next selected day. You can edit the days using **Repeat alarm** on the active screen. With Repeat off, the alarm is one-time.

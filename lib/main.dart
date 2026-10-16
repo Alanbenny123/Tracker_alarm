@@ -11,6 +11,7 @@ import 'features/help/guide_screen.dart';
 import 'features/map/destination_picker_screen.dart';
 import 'models/alarm_setup_args.dart';
 import 'models/place.dart';
+import 'models/shared_place_search_args.dart';
 import 'models/travel_mode.dart';
 import 'providers/app_providers.dart';
 import 'services/shared_location_service.dart';
@@ -22,14 +23,16 @@ void main() {
 }
 
 class TrackerAlarmApp extends ConsumerStatefulWidget {
-  const TrackerAlarmApp({super.key});
+  const TrackerAlarmApp({super.key, this.sharedLocationService});
+  final SharedLocationService? sharedLocationService;
   @override
   ConsumerState<TrackerAlarmApp> createState() => _TrackerAlarmAppState();
 }
 
 class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
     with WidgetsBindingObserver {
-  final _shareService = SharedLocationService();
+  late final _shareService =
+      widget.sharedLocationService ?? SharedLocationService();
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   bool _handlingShare = false;
   bool _shareQueued = false;
@@ -57,7 +60,12 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
             (context, state) => DestinationPickerScreen(
               key: ObjectKey(state.extra),
               initialQuery:
-                  state.extra is String ? state.extra as String : null,
+                  state.extra is SharedPlaceSearchArgs
+                      ? (state.extra as SharedPlaceSearchArgs).query
+                      : state.extra is String
+                      ? state.extra as String
+                      : null,
+              sharedPlace: state.extra is SharedPlaceSearchArgs,
               initialMode:
                   state.extra is TravelMode
                       ? state.extra as TravelMode
@@ -112,14 +120,16 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
     });
   }
 
-  Future<void> _takeSharedLocation() async {
+  Future<void> _takeSharedLocation({String? retryText}) async {
     if (_handlingShare) {
       _shareQueued = true;
       return;
     }
     _handlingShare = true;
+    String? sharedText;
     try {
-      final text = await _shareService.takePendingShare();
+      final text = retryText ?? await _shareService.takePendingShare();
+      sharedText = text;
       if (text == null || text.isEmpty) return;
       _shareCancelled = false;
       final loadingTimer = Stopwatch()..start();
@@ -133,7 +143,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       if (place == null) {
         final query = _shareService.fallbackQuery(text);
         if (query != null) {
-          router.go('/pick', extra: query);
+          router.go('/pick', extra: SharedPlaceSearchArgs(query));
           _messengerKey.currentState?.showSnackBar(
             const SnackBar(
               content: Text(
@@ -153,6 +163,20 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
         }
       } else {
         router.go('/setup', extra: place);
+      }
+    } on SharedLocationException catch (error) {
+      if (mounted && !_shareCancelled) {
+        _messengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: Text(error.message),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: () {
+                unawaited(_takeSharedLocation(retryText: sharedText));
+              },
+            ),
+          ),
+        );
       }
     } on PlatformException {
       // Sharing is available only on Android.

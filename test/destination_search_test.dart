@@ -44,6 +44,37 @@ class _Stops extends TransitStopsService {
 
 void main() {
   testWidgets(
+    'shared-place search hides the reported unrelated Canada result',
+    (tester) async {
+      final places = _Places();
+      final stops = _Stops();
+      await tester.pumpWidget(_app(places, stops, TravelMode.other, true));
+      await tester.enterText(
+        find.byType(TextField),
+        'Hello pets, Mamangalam, Edappally, Ernakulam, Keralam 682025',
+      );
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      places.requests.single.complete([
+        const Place(
+          name: '3569',
+          address: '3569 Dutch Village Rd, Halifax, NS B3N 0E8, Canada',
+          latitude: 44.65,
+          longitude: -63.63,
+        ),
+        stationA.copyWith(
+          name: 'Hello pets',
+          address: 'Mamangalam, Edappally, Ernakulam',
+        ),
+      ]);
+      await tester.pump();
+      expect(find.text('3569'), findsNothing);
+      expect(find.text('Hello pets'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
     'empty place search explains recovery and clears on a new query',
     (tester) async {
       final places = _Places();
@@ -186,6 +217,7 @@ Widget _app(
   _Places places,
   _Stops stops, [
   TravelMode mode = TravelMode.other,
+  bool sharedPlace = false,
 ]) => ProviderScope(
   overrides: [
     locationProvider.overrideWith(
@@ -196,6 +228,7 @@ Widget _app(
   child: MaterialApp(
     home: DestinationPickerScreen(
       initialMode: mode,
+      sharedPlace: sharedPlace,
       placesService: places,
       stopsService: stops,
     ),

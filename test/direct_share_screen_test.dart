@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:tracker_alarm/main.dart';
+import 'package:tracker_alarm/models/place.dart';
 import 'package:tracker_alarm/features/map/map_view.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
 import 'package:tracker_alarm/services/shared_location_service.dart';
@@ -23,7 +24,71 @@ class _Location extends FakeLocation {
   Stream<Position> visibleUpdates() => const Stream.empty();
 }
 
+class _RetryShareService extends SharedLocationService {
+  final received = <String>[];
+  @override
+  Future<Place?> parse(String text) async {
+    received.add(text);
+    if (received.length == 1) {
+      throw const SharedLocationException(
+        'Could not connect. Retry the shared link.',
+      );
+    }
+    return stationA.copyWith(name: 'Resolved shared place');
+  }
+}
+
 void main() {
+  testWidgets(
+    'a network failure offers Retry and never starts a generic worldwide search',
+    (tester) async {
+      const text =
+          'Hello pets\nhttps://maps.app.goo.gl/fwc4aVUmk4fWWyfy5?g_st=aw';
+      final service = _RetryShareService();
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      var takes = 0;
+      messenger.setMockMethodCallHandler(
+        SharedLocationService.channel,
+        (_) async => ++takes == 1 ? text : null,
+      );
+      const places = MethodChannel('tracker_alarm/places');
+      var searches = 0;
+      messenger.setMockMethodCallHandler(places, (_) async {
+        searches++;
+        return [];
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(SharedLocationService.channel, null);
+        messenger.setMockMethodCallHandler(places, null);
+      });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            storageProvider.overrideWith((ref) => RawMemoryStorage()),
+            geofenceProvider.overrideWithValue(_Native()),
+            locationServiceProvider.overrideWithValue(_Location()),
+          ],
+          child: TrackerAlarmApp(sharedLocationService: service),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('Choose destination'), findsNothing);
+      expect(searches, 0);
+      await tester.tap(find.text('Retry'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(service.received, [text, text]);
+      expect(takes, 1);
+      expect(find.text('Resolved shared place'), findsOneWidget);
+      expect(searches, 0);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   testWidgets(
     'direct shares replace an already open setup and search destination',
     (tester) async {

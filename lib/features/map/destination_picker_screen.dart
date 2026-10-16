@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../models/alarm_setup_args.dart';
 import '../../models/place.dart';
+import '../../models/shared_place_search_args.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../services/places_service.dart';
@@ -21,12 +22,14 @@ class DestinationPickerScreen extends ConsumerStatefulWidget {
     this.returnSelection = false,
     this.placesService,
     this.stopsService,
+    this.sharedPlace = false,
   });
   final String? initialQuery;
   final TravelMode? initialMode;
   final bool returnSelection;
   final PlacesService? placesService;
   final TransitStopsService? stopsService;
+  final bool sharedPlace;
   @override
   ConsumerState<DestinationPickerScreen> createState() =>
       _DestinationPickerScreenState();
@@ -122,7 +125,11 @@ class _DestinationPickerScreenState
     });
     if (text.length < 3) return;
     try {
-      final found = await placesService.search(text);
+      final received = await placesService.search(text);
+      final found =
+          widget.sharedPlace
+              ? received.where(SharedPlaceSearchArgs(text).matches).toList()
+              : received;
       if (!mounted || generation != searchGeneration) return;
       setState(() {
         results = found;
@@ -357,7 +364,9 @@ class _DestinationPickerScreenState
                       padding: const EdgeInsets.all(12),
                       child: Text(
                         queryHint ??
-                            'No places found for “$emptyPlaceQuery”. Check the spelling or search a nearby town or landmark.',
+                            (widget.sharedPlace
+                                ? 'No matching shared place found for “$emptyPlaceQuery”. Refine the address or choose the correct point on the map.'
+                                : 'No places found for “$emptyPlaceQuery”. Check the spelling or search a nearby town or landmark.'),
                       ),
                     ),
                   if (error != null)

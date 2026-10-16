@@ -13,7 +13,10 @@ void main() {
       clientFactory: () => client,
       lookupTimeout: const Duration(milliseconds: 30),
     );
-    expect(await lookup.parse('https://maps.app.goo.gl/stalled'), isNull);
+    await expectLater(
+      lookup.parse('https://maps.app.goo.gl/stalled'),
+      throwsA(isA<SharedLocationException>()),
+    );
     expect(client.closed, isTrue);
   });
 
@@ -40,6 +43,92 @@ void main() {
     expect(response.bodyRead, isFalse);
     expect(client.closed, isTrue);
   });
+
+  test(
+    'failed system connection retries with the DNS fallback and preserves the full address',
+    () async {
+      final normal =
+          _ShareClient()
+            ..request.completeError(
+              const SocketException('Connection timeout'),
+            );
+      final fallback =
+          _ShareClient()
+            ..request.complete(
+              _ShareRequest(
+                _ShareResponse(
+                  location:
+                      'https://www.google.com/maps/place/Hello+pets,+Mamangalam,+Edappally/data=!1sabc',
+                ),
+              ),
+            );
+      final lookup = SharedLocationService(
+        clientFactory: () => normal,
+        fallbackClientFactory: (host, own) async {
+          expect(host, 'maps.app.goo.gl');
+          own(fallback);
+          return fallback;
+        },
+      );
+      expect(
+        await lookup.parse('Hello pets\nhttps://maps.app.goo.gl/place'),
+        isNull,
+      );
+      expect(lookup.resolvedQuery, 'Hello pets, Mamangalam, Edappally');
+      expect(normal.closed, isTrue);
+      expect(fallback.closed, isTrue);
+    },
+  );
+
+  test(
+    'cancel during fallback closes late clients and never navigates with a late result',
+    () async {
+      final normal =
+          _ShareClient()
+            ..request.completeError(
+              const SocketException('Connection timeout'),
+            );
+      final pendingClient = Completer<HttpClient>();
+      final started = Completer<void>();
+      final lookup = SharedLocationService(
+        clientFactory: () => normal,
+        fallbackClientFactory: (host, own) {
+          started.complete();
+          return pendingClient.future;
+        },
+      );
+      final pending = lookup.parse('Hello pets\nhttps://maps.app.goo.gl/place');
+      await started.future;
+      lookup.cancel();
+      expect(await pending, isNull);
+      final late = _ShareClient();
+      pendingClient.complete(late);
+      await Future<void>.delayed(Duration.zero);
+      expect(late.closed, isTrue);
+      expect(lookup.resolvedQuery, isNull);
+    },
+  );
+
+  test(
+    'a failed fallback is an explicit retryable failure, not a generic worldwide place search',
+    () async {
+      final normal =
+          _ShareClient()
+            ..request.completeError(
+              const SocketException('Connection timeout'),
+            );
+      final lookup = SharedLocationService(
+        clientFactory: () => normal,
+        fallbackClientFactory:
+            (_, _) => Future.error(const SocketException('Offline')),
+      );
+      await expectLater(
+        lookup.parse('Hello pets\nhttps://maps.app.goo.gl/place'),
+        throwsA(isA<SharedLocationException>()),
+      );
+      expect(lookup.resolvedQuery, isNull);
+    },
+  );
 
   test('reads coordinates and name from a Google Maps place share', () async {
     final place = await service.parse(
@@ -116,7 +205,10 @@ void main() {
       );
       final client = _ShareClient()..request.complete(_ShareRequest(response));
       final lookup = SharedLocationService(clientFactory: () => client);
-      expect(await lookup.parse('https://maps.app.goo.gl/untrusted'), isNull);
+      await expectLater(
+        lookup.parse('https://maps.app.goo.gl/untrusted'),
+        throwsA(isA<SharedLocationException>()),
+      );
       expect(lookup.resolvedQuery, isNull);
       expect(client.requests, 1);
     },

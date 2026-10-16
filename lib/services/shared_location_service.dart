@@ -4,15 +4,25 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 
 import '../models/place.dart';
+import 'maps_dns_fallback.dart';
 
 class SharedLocationService {
   SharedLocationService({
     HttpClient Function()? clientFactory,
     this.lookupTimeout = const Duration(seconds: 12),
-  }) : _clientFactory = clientFactory ?? HttpClient.new;
+    Future<HttpClient> Function(
+      String host,
+      void Function(HttpClient) ownClient,
+    )?
+    fallbackClientFactory,
+  }) : _clientFactory = clientFactory ?? HttpClient.new,
+       _fallbackClientFactory =
+           fallbackClientFactory ?? MapsDnsFallback().createClient;
 
   final HttpClient Function() _clientFactory;
   final Duration lookupTimeout;
+  final Future<HttpClient> Function(String, void Function(HttpClient))
+  _fallbackClientFactory;
   _ShareLookup? _lookup;
 
   /// Ends the lookup immediately, including a stalled connection or response.
@@ -20,7 +30,7 @@ class SharedLocationService {
     final lookup = _lookup;
     if (lookup == null) return;
     if (!lookup.cancelled.isCompleted) lookup.cancelled.complete((null, null));
-    lookup.client.close(force: true);
+    lookup.close();
     _lookup = null;
   }
 
@@ -65,15 +75,50 @@ class SharedLocationService {
     lookup.client.connectionTimeout = lookupTimeout;
     try {
       final result = await Future.any([
-        _resolve(lookup.client, uri),
+        _resolveWithFallback(lookup, uri),
         lookup.cancelled.future,
-      ]).timeout(lookupTimeout, onTimeout: () => (null, null));
+      ]).timeout(lookupTimeout);
       if (!identical(_lookup, lookup)) return null;
       resolvedQuery = result.$2;
+      if (result.$1 == null && resolvedQuery == null) {
+        throw const SharedLocationException(
+          'The Google Maps link did not return a destination. Please retry.',
+        );
+      }
       return result.$1;
+    } on SharedLocationException {
+      rethrow;
+    } on Exception {
+      if (!identical(_lookup, lookup) || lookup.cancelled.isCompleted) {
+        return null;
+      }
+      throw const SharedLocationException(
+        'Could not connect to the shared Google Maps link. Check your connection and retry.',
+      );
     } finally {
-      lookup.client.close(force: true);
+      lookup.close();
       if (identical(_lookup, lookup)) _lookup = null;
+    }
+  }
+
+  Future<(Place?, String?)> _resolveWithFallback(
+    _ShareLookup lookup,
+    Uri uri,
+  ) async {
+    try {
+      return await _resolve(
+        lookup.client,
+        uri,
+      ).timeout(const Duration(seconds: 4));
+    } on Exception {
+      if (lookup.closed || lookup.cancelled.isCompleted) return (null, null);
+      lookup.client.close(force: true);
+      final fallback = await _fallbackClientFactory(uri.host, lookup.own);
+      if (lookup.closed || lookup.cancelled.isCompleted) {
+        fallback.close(force: true);
+        return (null, null);
+      }
+      return _resolve(fallback, uri);
     }
   }
 
@@ -104,7 +149,7 @@ class SharedLocationService {
       }
       return (null, null);
     } on Exception {
-      return (null, null);
+      rethrow;
     }
   }
 
@@ -201,5 +246,30 @@ class _ShareLookup {
   _ShareLookup(this.client);
 
   final HttpClient client;
+  final extraClients = <HttpClient>[];
+  bool closed = false;
+  void own(HttpClient client) {
+    if (closed) {
+      client.close(force: true);
+    } else {
+      extraClients.add(client);
+    }
+  }
+
+  void close() {
+    closed = true;
+    client.close(force: true);
+    for (final client in extraClients) {
+      client.close(force: true);
+    }
+  }
+
   final cancelled = Completer<(Place?, String?)>();
+}
+
+class SharedLocationException implements Exception {
+  const SharedLocationException(this.message);
+  final String message;
+  @override
+  String toString() => message;
 }
