@@ -13,17 +13,19 @@ import '../../providers/app_providers.dart';
 import '../map/map_view.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.initialIndex = 0});
+  final int initialIndex;
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  int index = 0;
+  late int index;
   Timer? _statusTimer;
   @override
   void initState() {
     super.initState();
+    index = widget.initialIndex;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(locationProvider).refreshAndTrack();
       ref.read(alarmProvider).syncStatus();
@@ -32,6 +34,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       const Duration(seconds: 5),
       (_) => ref.read(alarmProvider).syncStatus(),
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialIndex != widget.initialIndex) {
+      index = widget.initialIndex;
+    }
   }
 
   @override
@@ -71,6 +81,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
     final pages = [
       const _HomeTab(),
+      const _ActiveAlarmsTab(),
       const _SavedTab(),
       const _HistoryTab(),
       const _SettingsTab(),
@@ -79,20 +90,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: SafeArea(child: pages[index]),
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
-        onDestinationSelected: (value) => setState(() => index = value),
-        destinations: const [
-          NavigationDestination(
+        onDestinationSelected: (value) {
+          const tabs = ['home', 'alarms', 'saved', 'history', 'settings'];
+          context.go(value == 0 ? '/' : '/?tab=${tabs[value]}');
+        },
+        destinations: [
+          const NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: 'Home',
           ),
           NavigationDestination(
+            icon: Badge.count(
+              count: alarm.alarms.length,
+              isLabelVisible: alarm.alarms.isNotEmpty,
+              child: const Icon(Icons.alarm_outlined),
+            ),
+            selectedIcon: Badge.count(
+              count: alarm.alarms.length,
+              isLabelVisible: alarm.alarms.isNotEmpty,
+              child: const Icon(Icons.alarm),
+            ),
+            label: 'Alarms',
+            tooltip: 'See active alarms',
+          ),
+          const NavigationDestination(
             icon: Icon(Icons.bookmark_border),
             selectedIcon: Icon(Icons.bookmark),
             label: 'Saved',
           ),
-          NavigationDestination(icon: Icon(Icons.history), label: 'History'),
-          NavigationDestination(
+          const NavigationDestination(
+            icon: Icon(Icons.history),
+            label: 'History',
+          ),
+          const NavigationDestination(
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: 'Settings',
@@ -175,33 +206,7 @@ class _HomeTab extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
-          for (final entry in activeAlarms)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.notifications_active),
-                title: Text(entry.alarm.place.name),
-                subtitle: Text(
-                  '${formatDistance(entry.alarm.radius)} · '
-                  '${entry.alarm.alertAt == null ? 'Distance only' : '${MaterialLocalizations.of(context).formatMediumDate(entry.alarm.alertAt!)} '
-                          '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.alarm.alertAt!))}'} · '
-                  '${entry.alarm.repeatDays == 0 ? '' : 'Repeats ${repeatDaysLabel(entry.alarm.repeatDays)} · '}'
-                  '${entry.status == 'triggered'
-                      ? 'Ringing'
-                      : entry.status == 'snoozed'
-                      ? 'Snoozed'
-                      : entry.alarm.repeatDays != 0 && !entry.distanceReady
-                      ? 'Scheduled'
-                      : 'Monitoring'}',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  ref.read(alarmProvider).select(entry.alarm.id);
-                  context.push(
-                    entry.status == 'triggered' ? '/triggered' : '/active',
-                  );
-                },
-              ),
-            ),
+          for (final entry in activeAlarms) _ActiveAlarmCard(entry: entry),
           const SizedBox(height: 12),
         ],
         SizedBox(
@@ -329,6 +334,91 @@ class _InfoMessage extends StatelessWidget {
           TextButton(onPressed: onPressed, child: Text(action)),
         ],
       ),
+    ),
+  );
+}
+
+class _ActiveAlarmsTab extends ConsumerWidget {
+  const _ActiveAlarmsTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final alarms = ref.watch(alarmProvider).alarms;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Active alarms (${alarms.length})'),
+        actions: [
+          IconButton(
+            tooltip: 'Add alarm',
+            onPressed: () => context.push('/pick'),
+            icon: const Icon(Icons.add),
+          ),
+        ],
+      ),
+      body:
+          alarms.isEmpty
+              ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.alarm_off_outlined, size: 56),
+                      const SizedBox(height: 16),
+                      const Text('No active alarms'),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: () => context.push('/pick'),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add alarm'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              : RefreshIndicator(
+                onRefresh: () => ref.read(alarmProvider).syncStatus(),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    for (final entry in alarms) _ActiveAlarmCard(entry: entry),
+                  ],
+                ),
+              ),
+    );
+  }
+}
+
+class _ActiveAlarmCard extends ConsumerWidget {
+  const _ActiveAlarmCard({required this.entry});
+  final AlarmProgress entry;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Card(
+    child: ListTile(
+      leading: Icon(
+        entry.status == 'snoozed' ? Icons.snooze : Icons.notifications_active,
+      ),
+      title: Text(entry.alarm.place.name),
+      subtitle: Text(
+        '${formatDistance(entry.alarm.radius)} · '
+        '${entry.alarm.alertAt == null ? 'Distance only' : '${MaterialLocalizations.of(context).formatMediumDate(entry.alarm.alertAt!)} '
+                '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.alarm.alertAt!))}'} · '
+        '${entry.alarm.repeatDays == 0 ? '' : 'Repeats ${repeatDaysLabel(entry.alarm.repeatDays)} · '}'
+        '${entry.status == 'triggered'
+            ? 'Ringing'
+            : entry.status == 'snoozed'
+            ? 'Snoozed'
+            : entry.alarm.repeatDays != 0 && !entry.distanceReady
+            ? 'Scheduled'
+            : 'Monitoring'}',
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () {
+        ref.read(alarmProvider).select(entry.alarm.id);
+        context.push(entry.status == 'triggered' ? '/triggered' : '/active');
+      },
     ),
   );
 }

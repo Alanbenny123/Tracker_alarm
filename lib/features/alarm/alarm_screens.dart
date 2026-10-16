@@ -835,7 +835,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
         actions: [
           IconButton(
             tooltip: 'All alarms',
-            onPressed: () => context.go('/'),
+            onPressed: () => context.go('/?tab=alarms'),
             icon: const Icon(Icons.list),
           ),
           IconButton(

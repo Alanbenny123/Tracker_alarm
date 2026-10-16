@@ -29,7 +29,7 @@ In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. W
 
 Repeat runs the distance alarm **only on the weekdays you select**. After it rings on one selected day, it resets for the next selected day. You can edit the days using **Repeat alarm** on the active screen. With Repeat off, the alarm is one-time.
 
-You can have up to **10 active alarms**. On the active screen, tap **Add another alarm for this destination** to make another alarm for the same place. To target a different place, return to Home and choose a new destination. Each alarm has its own distance and repeat settings. Home lists active alarms; tap one to view or end it.
+You can have up to **10 active alarms**. On the active screen, tap **Add another alarm for this destination** to make another alarm for the same place. To target a different place, return to Home and choose a new destination. Each alarm has its own distance and repeat settings. Tap **Alarms** in the bottom navigation to see all active alarms, including scheduled repeats. The badge shows how many you have. Tap an alarm to view or end it, or pull down on the list to refresh it.
 
 When an alarm rings, use the app or its notification to handle it. **Snooze** pauses the sound for the offered interval; **End trip** or **Stop alarm** ends that alarm. Other active alarms remain in place.
 

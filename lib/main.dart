@@ -35,7 +35,19 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
   bool _resolvingSharedLocation = false;
   late final GoRouter router = GoRouter(
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
+      GoRoute(
+        path: '/',
+        builder:
+            (context, state) => HomeScreen(
+              initialIndex: switch (state.uri.queryParameters['tab']) {
+                'alarms' => 1,
+                'saved' => 2,
+                'history' => 3,
+                'settings' => 4,
+                _ => 0,
+              },
+            ),
+      ),
       GoRoute(path: '/guide', builder: (context, state) => const GuideScreen()),
       GoRoute(
         path: '/pick',

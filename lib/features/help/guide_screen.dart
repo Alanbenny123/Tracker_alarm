@@ -116,7 +116,7 @@ class GuideScreen extends StatelessWidget {
           title: 'Saved places and history',
           points: [
             'Use Save this place on the setup screen to keep a destination for later. Find it under Saved on Home.',
-            'Use History to review ended trips and choose a past destination again. Active alarms are listed on Home; tap one to see its status or end it.',
+            'Use History to review ended trips and choose a past destination again. Tap Alarms in the bottom navigation to see all active alarms, including scheduled repeats. Tap an alarm to see its status or end it.',
           ],
         ),
         const SizedBox(height: 16),
