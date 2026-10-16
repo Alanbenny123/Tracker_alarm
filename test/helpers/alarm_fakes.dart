@@ -54,6 +54,7 @@ class FakeNative extends GeofenceService {
   Future<void> multiRegister(DestinationAlarm alarm) async {
     states.add({
       'id': alarm.id,
+      'label': alarm.label,
       'name': alarm.place.name,
       'address': alarm.place.address,
       'latitude': alarm.place.latitude,
@@ -77,6 +78,56 @@ class FakeNative extends GeofenceService {
 
   Map<String, dynamic> entry(String id) =>
       states.firstWhere((state) => state['id'] == id);
+  final updatedIds = <String>[];
+  final testSounds = <String>[];
+  final testVibrations = <bool>[];
+  int testStops = 0;
+  @override
+  Future<void> startTestAlarm(String sound, bool vibration) async {
+    testSounds.add(sound);
+    testVibrations.add(vibration);
+  }
+
+  @override
+  Future<void> stopTestAlarm() async {
+    testStops++;
+  }
+
+  @override
+  Future<void> renameAlarm(String id, String label) async {
+    entry(id)['label'] = label;
+  }
+
+  @override
+  Future<void> pauseAlarm(String id, bool paused) async {
+    entry(id)['status'] = paused ? 'paused' : 'active';
+    entry(id)['distanceReady'] = !paused;
+  }
+
+  @override
+  Future<void> updateAlarm(
+    String id,
+    Place place,
+    double radius,
+    bool vibration,
+    String sound,
+    int repeatDays,
+    String label,
+  ) async {
+    updatedIds.add(id);
+    entry(id).addAll({
+      'name': place.name,
+      'address': place.address,
+      'latitude': place.latitude,
+      'longitude': place.longitude,
+      'radius': radius,
+      'vibration': vibration,
+      'sound': sound,
+      'repeatDays': repeatDays,
+      'label': label,
+    });
+  }
+
   @override
   Future<void> multiTrigger(String id) async {
     triggeredIds.add(id);

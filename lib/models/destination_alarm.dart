@@ -12,9 +12,12 @@ class DestinationAlarm {
     this.repeatDays = 0,
     this.leadMinutes = 0,
     this.repeatStartDay,
+    this.label = '',
   });
 
   final String id;
+  final String label;
+  String get displayName => label.trim().isEmpty ? place.name : label.trim();
   final Place place;
   final double radius;
   final bool vibration;
@@ -29,6 +32,7 @@ class DestinationAlarm {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'label': label,
     'place': place.toJson(),
     'radius': radius,
     'vibration': vibration,
@@ -53,6 +57,7 @@ class DestinationAlarm {
     }
     return DestinationAlarm(
       id: id,
+      label: json['label'] as String? ?? '',
       place: Place.fromJson(Map<String, dynamic>.from(json['place'] as Map)),
       radius: radius,
       vibration: json['vibration'] as bool? ?? true,

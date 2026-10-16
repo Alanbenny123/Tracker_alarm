@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../models/destination_alarm.dart';
+import '../models/place.dart';
 
 class AlarmRequirements {
   const AlarmRequirements({
@@ -81,6 +82,7 @@ class GeofenceService {
   Future<void> multiRegister(DestinationAlarm alarm) =>
       _channel.invokeMethod<void>('multiRegister', {
         'id': alarm.id,
+        'label': alarm.label,
         'name': alarm.place.name,
         'address': alarm.place.address,
         'latitude': alarm.place.latitude,
@@ -94,6 +96,37 @@ class GeofenceService {
         'leadMinutes': alarm.leadMinutes,
         'repeatStartDay': alarm.repeatStartDay?.millisecondsSinceEpoch,
       });
+
+  Future<void> startTestAlarm(String sound, bool vibration) =>
+      _channel.invokeMethod<void>('testAlarmStart', {
+        'sound': sound,
+        'vibration': vibration,
+      });
+  Future<void> stopTestAlarm() => _channel.invokeMethod<void>('testAlarmStop');
+  Future<void> renameAlarm(String id, String label) =>
+      _channel.invokeMethod<void>('multiRename', {'id': id, 'label': label});
+  Future<void> pauseAlarm(String id, bool paused) =>
+      _channel.invokeMethod<void>('multiPause', {'id': id, 'paused': paused});
+  Future<void> updateAlarm(
+    String id,
+    Place place,
+    double radius,
+    bool vibration,
+    String sound,
+    int repeatDays,
+    String label,
+  ) => _channel.invokeMethod<void>('multiUpdate', {
+    'id': id,
+    'name': place.name,
+    'address': place.address,
+    'latitude': place.latitude,
+    'longitude': place.longitude,
+    'radius': radius,
+    'vibration': vibration,
+    'sound': sound,
+    'repeatDays': repeatDays,
+    'label': label,
+  });
 
   Future<void> clearFinished() =>
       _channel.invokeMethod<void>('multiClearFinished');

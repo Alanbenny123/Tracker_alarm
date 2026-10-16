@@ -28,22 +28,28 @@ class MultiTrackingService : Service() {
             val service = running ?: return mapOf(
                 "monitoringMessage" to (startFailure ?: "Background service not running. Reopen the app to restart."),
                 "monitoringHealthy" to false, "gpsStatus" to "Not monitoring")
-            if (MultiAlarmRuntime.playbackResumeRequired(context)) return mapOf(
+            val fix = mutableMapOf<String, Any>()
+            if (service.lastFixAt > 0L) {
+                fix["lastGpsFixAt"] = service.lastFixAt
+                if (service.lastAccuracy.isFinite() && service.lastAccuracy != Float.MAX_VALUE)
+                    fix["gpsAccuracy"] = service.lastAccuracy.toDouble()
+            }
+            if (MultiAlarmRuntime.playbackResumeRequired(context)) return fix + mapOf(
                 "monitoringMessage" to "Phone restarted. Open the app to resume the pending alert.",
                 "monitoringHealthy" to false, "gpsStatus" to "Alert needs attention")
-            if (!AlarmScheduler.canScheduleExact(context)) return mapOf(
+            if (!AlarmScheduler.canScheduleExact(context)) return fix + mapOf(
                 "monitoringMessage" to "Allow Alarms & reminders in app settings. Snooze and scheduled alerts may be delayed.",
                 "monitoringHealthy" to false, "gpsStatus" to "Check alarm permission")
-            if (!AlarmReadiness.notificationsReady(context)) return mapOf(
+            if (!AlarmReadiness.notificationsReady(context)) return fix + mapOf(
                 "monitoringMessage" to "Alarm or tracking notifications are blocked. Check notification settings.",
                 "monitoringHealthy" to false, "gpsStatus" to "Check notifications")
-            if (!AlarmReadiness.fullScreenReady(context)) return mapOf(
+            if (!AlarmReadiness.fullScreenReady(context)) return fix + mapOf(
                 "monitoringMessage" to "Allow lock-screen alarms in Android settings.",
                 "monitoringHealthy" to false, "gpsStatus" to "Check lock-screen access")
             val distanceActive = MultiAlarmRuntime.live(context).any {
                 !it.distanceFired && it.distanceReady(System.currentTimeMillis())
             }
-            if (!distanceActive) return mapOf("monitoringMessage" to "Waiting for the next scheduled alert.",
+            if (!distanceActive) return fix + mapOf("monitoringMessage" to "Waiting for the next scheduled alert.",
                 "monitoringHealthy" to true, "gpsStatus" to "Not needed right now")
             val age = if (service.lastFixElapsed == 0L) Long.MAX_VALUE else
                 SystemClock.elapsedRealtime() - service.lastFixElapsed
@@ -53,7 +59,7 @@ class MultiTrackingService : Service() {
                 age > WAKE_TIMEOUT_MS -> "Waiting for a fresh GPS fix."
                 else -> null
             }
-            return mapOf(
+            return fix + mapOf(
                 "monitoringMessage" to (problem ?: "GPS monitoring active · last fix ${age / 1000} s ago"),
                 "monitoringHealthy" to (problem == null),
                 "gpsStatus" to if (problem != null) problem else when {
@@ -82,6 +88,7 @@ class MultiTrackingService : Service() {
     private var interval = 0L
     private var ringingId: String? = null
     private var lastFixElapsed = 0L
+    private var lastFixAt = 0L
     private var lastAccuracy = Float.MAX_VALUE
     private var lastRequestElapsed = 0L
     private val heartbeat = object : Runnable {
@@ -100,6 +107,7 @@ class MultiTrackingService : Service() {
         override fun onLocationChanged(location: Location) {
             if (System.currentTimeMillis() - location.time in 0..30_000L) {
                 lastFixElapsed = SystemClock.elapsedRealtime()
+                lastFixAt = location.time
                 lastAccuracy = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE
             }
             val wanted = MultiAlarmRuntime.checkLocation(this@MultiTrackingService, location)
@@ -169,6 +177,7 @@ class MultiTrackingService : Service() {
             AlarmRuntime.notifications(this).cancel(MultiAlarmRuntime.TRACKING_ID)
             if (ringingId != ringing.id) {
                 sound.stop()
+                TestAlarmService.stop(this)
                 sound.start(ringing.sound, ringing.vibration)
                 ringingId = ringing.id
             }

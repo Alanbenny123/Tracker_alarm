@@ -49,9 +49,15 @@ object MultiAlarmRuntime {
         var cycleDay: Long = 0L,
         var cycleDate: Int = 0,
         val hasTime: Boolean = alertAt > 0L,
+        val label: String = "",
+        var paused: Boolean = false,
+        var monitoringSince: Long = startedAt,
     ) {
         fun live() = status == "active" || status == "triggered" || status == "snoozed"
+        val displayName: String get() = label.ifBlank { name }
+        fun monitoring() = live() && !paused
         fun distanceReady(now: Long): Boolean {
+            if (paused) return false
             if (repeatDays == 0) return true
             if (now < cycleDay) return false
             val end = Calendar.getInstance().apply {
@@ -61,15 +67,21 @@ object MultiAlarmRuntime {
             return now < end
         }
         fun map(): Map<String, Any> = mutableMapOf<String, Any>(
-            "id" to id, "name" to name, "address" to address,
+            "id" to id, "name" to name, "label" to label, "address" to address,
             "latitude" to latitude, "longitude" to longitude, "radius" to radius.toDouble(),
             "vibration" to vibration, "sound" to sound, "startedAt" to startedAt,
-            "status" to status, "timeFired" to timeFired, "distanceFired" to distanceFired,
+            "status" to (if (paused && live()) "paused" else status), "timeFired" to timeFired, "distanceFired" to distanceFired,
             "triggerReason" to triggerReason, "triggeredAt" to triggeredAt,
             "repeatDays" to repeatDays, "leadMinutes" to leadMinutes,
             "distanceReady" to distanceReady(System.currentTimeMillis()),
         ).also { if (alertAt > 0L) it["alertAt"] = alertAt }
-            .also { if (repeatDays != 0) it["repeatStartDay"] = cycleDay }
+            .also {
+                if (repeatDays != 0) {
+                    it["repeatStartDay"] = cycleDay
+                    if (!paused) it["nextRepeatAt"] = if (cycleDay > System.currentTimeMillis()) cycleDay
+                        else MultiAlarmRuntime.nextCycle(this).first
+                }
+            }
 
         fun json() = JSONObject().apply {
             put("id", id); put("name", name); put("address", address)
@@ -81,7 +93,8 @@ object MultiAlarmRuntime {
             put("repeatDays", repeatDays); put("leadMinutes", leadMinutes)
             put("targetMinute", targetMinute); put("cycleDay", cycleDay)
             put("cycleDate", cycleDate)
-            put("hasTime", hasTime)
+            put("hasTime", hasTime); put("label", label); put("paused", paused)
+            put("monitoringSince", monitoringSince)
         }
 
         companion object {
@@ -103,6 +116,8 @@ object MultiAlarmRuntime {
                 cycleDay = json.optLong("cycleDay", 0L),
                 cycleDate = json.optInt("cycleDate", 0),
                 hasTime = json.optBoolean("hasTime", json.optLong("alertAt", 0L) > 0L),
+                label = json.optString("label", ""), paused = json.optBoolean("paused", false),
+                monitoringSince = json.optLong("monitoringSince", json.optLong("startedAt", 0L)),
             )
         }
     }
@@ -175,9 +190,9 @@ object MultiAlarmRuntime {
                 "geofenceStatus" to (geofenceStatus[entry.id] ?: "Not confirmed"))
         }
     }
-    @Synchronized fun live(context: Context): List<Entry> = read(context).filter { it.live() }
+    @Synchronized fun live(context: Context): List<Entry> = read(context).filter { it.monitoring() }
     @Synchronized fun ringing(context: Context): Entry? = read(context)
-        .filter { it.status == "triggered" }
+        .filter { it.status == "triggered" && !it.paused }
         .minWithOrNull(compareBy<Entry> { it.triggeredAt }.thenBy { it.startedAt })
 
     private fun nextTriggerTime(entries: List<Entry>): Long = maxOf(
@@ -228,7 +243,7 @@ object MultiAlarmRuntime {
     }
 
     private fun advanceCycle(entry: Entry, now: Long, force: Boolean = false): Boolean {
-        if (entry.repeatDays == 0 || entry.status != "active") return false
+        if (entry.repeatDays == 0 || entry.status != "active" || entry.paused) return false
         var changed = false
         var shouldAdvance = force
         // An old alarm can be restored after days or weeks without the app running.
@@ -290,6 +305,7 @@ object MultiAlarmRuntime {
 
     @Synchronized fun register(context: Context, args: Map<String, Any>, result: MethodChannel.Result) {
         migrateLegacy(context)
+        val label = (args["label"] as? String ?: "").trim()
         val id = args["id"] as? String
         val name = args["name"] as? String
         val lat = (args["latitude"] as? Number)?.toDouble()
@@ -302,7 +318,7 @@ object MultiAlarmRuntime {
         val targetAt = if (alertAt > 0L) alertAt + leadMinutes * 60_000L else repeatStartAt
         val targetCalendar = Calendar.getInstance().apply { timeInMillis = targetAt }
         val targetWeekday = (targetCalendar.get(Calendar.DAY_OF_WEEK) + 5) % 7
-        if (id.isNullOrBlank() || name.isNullOrBlank() || lat == null || lon == null ||
+        if (label.length > 80 || id.isNullOrBlank() || name.isNullOrBlank() || lat == null || lon == null ||
             !lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0 ||
             radius == null || !radius.isFinite() || radius !in 100f..2000f ||
             repeatDays !in 0..127 || leadMinutes !in listOf(0, 5, 15, 30, 60) ||
@@ -327,7 +343,7 @@ object MultiAlarmRuntime {
             targetMinute = targetCalendar.get(Calendar.HOUR_OF_DAY) * 60 + targetCalendar.get(Calendar.MINUTE),
             cycleDay = if (repeatDays == 0) 0L else dayStart(targetAt),
             cycleDate = if (repeatDays == 0) 0 else dateNumber(targetCalendar),
-            hasTime = alertAt > 0L)
+            hasTime = alertAt > 0L, label = label)
         entries.add(entry)
         if (!write(context, entries)) { result.error("storage", "Could not save alarm", null); return }
         try { refresh(context, strict = true) } catch (e: Exception) {
@@ -355,15 +371,7 @@ object MultiAlarmRuntime {
         if (entries.removeAll { it.id == id && !it.live() }) write(context, entries)
     }
 
-    @Synchronized fun updateRepeat(context: Context, id: String, days: Int, result: MethodChannel.Result) {
-        if (days !in 0..127) {
-            result.error("arguments", "Choose valid repeat days", null); return
-        }
-        val entries = read(context)
-        val entry = entries.firstOrNull { it.id == id && it.status == "active" } ?: run {
-            result.error("state", "Alarm must be active to edit repeat days", null); return
-        }
-        if (days == entry.repeatDays) { result.success(null); return }
+    private fun applyRepeat(entry: Entry, days: Int) {
         if (days == 0) {
             entry.repeatDays = 0
             entry.cycleDay = 0L
@@ -394,6 +402,93 @@ object MultiAlarmRuntime {
             entry.timeFired = false
             entry.distanceFired = false
         }
+    }
+
+    @Synchronized fun rename(context: Context, id: String, label: String, result: MethodChannel.Result) {
+        val entries = read(context)
+        val index = entries.indexOfFirst { it.id == id && it.live() }
+        if (index < 0 || label.trim().length > 80) {
+            result.error("arguments", "Alarm missing or name is too long", null); return
+        }
+        entries[index] = entries[index].copy(label = label.trim())
+        if (!write(context, entries)) { result.error("storage", "Could not save alarm name", null); return }
+        refresh(context)
+        result.success(null)
+    }
+
+    @Synchronized fun pause(context: Context, id: String, paused: Boolean, result: MethodChannel.Result) {
+        val entries = read(context)
+        val entry = entries.firstOrNull { it.id == id && it.status == "active" } ?: run {
+            result.error("state", "Handle the ringing or snoozed alert before pausing or resuming", null); return
+        }
+        if (entry.paused == paused) { result.success(null); return }
+        val before = entry.copy()
+        entry.paused = paused
+        val now = System.currentTimeMillis()
+        if (!paused) {
+            entry.monitoringSince = now
+            advanceCycle(entry, now)
+            // Resuming skips time reminders missed while paused.
+            if (entry.alertAt in 1..now && !entry.timeFired) entry.timeFired = true
+            if (entry.repeatDays == 0 && entry.distanceFired && (entry.alertAt == 0L || entry.timeFired))
+                entry.status = "completed"
+        }
+        if (!write(context, entries)) { result.error("storage", "Could not save pause setting", null); return }
+        removeGeofence(context, id)
+        try { refresh(context, strict = !paused) } catch (_: Exception) {
+            entries[entries.indexOf(entry)] = before
+            write(context, entries)
+            refresh(context)
+            result.error("tracking", "Could not resume monitoring. Recheck phone settings.", null); return
+        }
+        if (!paused && entry.monitoring() && !entry.distanceFired) addGeofence(context, entry)
+        result.success(null)
+    }
+
+    @Synchronized fun update(context: Context, args: Map<String, Any>, result: MethodChannel.Result) {
+        val entries = read(context)
+        val index = entries.indexOfFirst { it.id == args["id"] && it.status == "active" }
+        if (index < 0) { result.error("state", "Stop the ringing alert before editing this alarm", null); return }
+        val old = entries[index]
+        val lat = (args["latitude"] as? Number)?.toDouble()
+        val lon = (args["longitude"] as? Number)?.toDouble()
+        val radius = (args["radius"] as? Number)?.toFloat()
+        val days = (args["repeatDays"] as? Number)?.toInt()
+        val label = (args["label"] as? String ?: "").trim()
+        val name = args["name"] as? String
+        if (name.isNullOrBlank() || lat == null || lon == null || !lat.isFinite() || !lon.isFinite() ||
+            lat !in -90.0..90.0 || lon !in -180.0..180.0 || radius == null ||
+            !radius.isFinite() || radius !in 100f..2000f || days == null || days !in 0..127 || label.length > 80) {
+            result.error("arguments", "Invalid alarm settings", null); return
+        }
+        val destinationChanged = lat != old.latitude || lon != old.longitude || radius != old.radius
+        val changed = old.copy(name = name, address = args["address"] as? String ?: "",
+            latitude = lat, longitude = lon, radius = radius,
+            vibration = args["vibration"] as? Boolean ?: old.vibration,
+            sound = args["sound"] as? String ?: old.sound, label = label)
+        if (destinationChanged) {
+            changed.distanceFired = false
+            changed.monitoringSince = System.currentTimeMillis()
+        }
+        if (days != old.repeatDays) applyRepeat(changed, days)
+        entries[index] = changed
+        if (!write(context, entries)) { result.error("storage", "Could not save alarm changes", null); return }
+        if (destinationChanged || days != old.repeatDays) removeGeofence(context, old.id)
+        refresh(context)
+        if (changed.monitoring() && !changed.distanceFired) addGeofence(context, changed)
+        result.success(null)
+    }
+
+    @Synchronized fun updateRepeat(context: Context, id: String, days: Int, result: MethodChannel.Result) {
+        if (days !in 0..127) {
+            result.error("arguments", "Choose valid repeat days", null); return
+        }
+        val entries = read(context)
+        val entry = entries.firstOrNull { it.id == id && it.status == "active" } ?: run {
+            result.error("state", "Alarm must be active to edit repeat days", null); return
+        }
+        if (days == entry.repeatDays) { result.success(null); return }
+        applyRepeat(entry, days)
         if (!write(context, entries)) {
             result.error("storage", "Could not save repeat days", null); return
         }
@@ -406,7 +501,7 @@ object MultiAlarmRuntime {
     @Synchronized fun trigger(context: Context, id: String, reason: String) {
         if (reason == "distance") checkDue(context)
         val entries = read(context)
-        val entry = entries.firstOrNull { it.id == id && it.live() } ?: return
+        val entry = entries.firstOrNull { it.id == id && it.monitoring() } ?: return
         if (reason == "time") {
             if (entry.alertAt <= 0L || entry.timeFired) return
             entry.timeFired = true
@@ -454,13 +549,13 @@ object MultiAlarmRuntime {
         val now = System.currentTimeMillis()
         var changed = false
         val advanced = mutableListOf<Entry>()
-        entries.filter { it.live() }.forEach { entry ->
+        entries.filter { it.monitoring() }.forEach { entry ->
             if (advanceCycle(entry, now)) {
                 changed = true
                 advanced.add(entry)
             }
         }
-        val due = entries.filter { entry -> entry.live() &&
+        val due = entries.filter { entry -> entry.monitoring() &&
             ((entry.alertAt > 0L && !entry.timeFired && entry.alertAt <= now) ||
              (entry.status == "snoozed" && entry.snoozedUntil > 0L && entry.snoozedUntil <= now))
         }.sortedBy { entry ->
@@ -502,11 +597,11 @@ object MultiAlarmRuntime {
         val reached = mutableListOf<Triple<Entry, Float, Double>>()
         var speedInterval = 30_000L
         for (entry in entries) {
-            if (entry.distanceFired || !entry.distanceReady(System.currentTimeMillis())) continue
+            if (location.time < entry.monitoringSince || entry.distanceFired || !entry.distanceReady(System.currentTimeMillis())) continue
             val distances = FloatArray(1)
             Location.distanceBetween(location.latitude, location.longitude, entry.latitude, entry.longitude, distances)
             val remaining = distances[0] - entry.radius
-            val crossing = if (previous != null && previous.time >= maxOf(entry.startedAt, entry.cycleDay))
+            val crossing = if (previous != null && previous.time >= maxOf(entry.startedAt, entry.cycleDay, entry.monitoringSince))
                 DestinationCrossing.fraction(previous, location, entry.latitude, entry.longitude, entry.radius)
                 else null
             if (remaining <= 5_000f && location.hasSpeed() && location.speed > 1f) {
@@ -586,7 +681,7 @@ object MultiAlarmRuntime {
     }
 
     @Synchronized private fun scheduleNext(context: Context, entries: List<Entry>) {
-        val next = entries.filter { it.live() }.flatMap { entry ->
+        val next = entries.filter { it.monitoring() }.flatMap { entry ->
             listOf(if (!entry.timeFired) entry.alertAt else 0L,
                 if (entry.status == "snoozed") entry.snoozedUntil else 0L,
                 if (entry.repeatDays != 0 && entry.status == "active") nextCycleStart(entry) else 0L,
@@ -594,7 +689,7 @@ object MultiAlarmRuntime {
                     entry.cycleDay > System.currentTimeMillis()) entry.cycleDay else 0L)
         }.filter { it > 0L }.minOrNull() ?: 0L
         val exact = AlarmScheduler.canScheduleExact(context)
-        val audible = entries.any { it.live() &&
+        val audible = entries.any { it.monitoring() &&
             ((!it.timeFired && it.alertAt == next && next > 0L) ||
              (it.status == "snoozed" && it.snoozedUntil == next && next > 0L)) }
         if (next == scheduledAt && exact == scheduledExact && audible == scheduledAudible) return
@@ -654,7 +749,7 @@ object MultiAlarmRuntime {
             .setSound(null).setVibrate(null).setOnlyAlertOnce(true)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(when (entry.triggerReason) { "time" -> "Time alarm"; "both" -> "Time and distance alarm"; else -> "Destination nearby" })
-            .setContentText(if (waiting == 0) entry.name else "${entry.name} · $waiting more alert${if (waiting == 1) "" else "s"} waiting")
+            .setContentText(if (waiting == 0) entry.displayName else "${entry.displayName} · $waiting more alert${if (waiting == 1) "" else "s"} waiting")
             .setCategory(Notification.CATEGORY_ALARM)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setPriority(Notification.PRIORITY_MAX)

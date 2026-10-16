@@ -18,7 +18,7 @@ class LockedAlarmActivity : Activity() {
         override fun run() {
             val alarm = MultiAlarmRuntime.ringing(this@LockedAlarmActivity)
             if (alarm == null) { finish(); return }
-            title.text = "Destination alarm\n\n${alarm.name}"
+            title.text = "Destination alarm\n\n${alarm.displayName}"
             handler.postDelayed(this, 1000)
         }
     }

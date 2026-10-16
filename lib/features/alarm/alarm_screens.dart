@@ -8,12 +8,14 @@ import 'package:flutter/services.dart';
 
 import '../../models/place.dart';
 import '../../models/alarm_setup_args.dart';
+import '../../models/destination_alarm.dart';
 import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../services/geofence_service.dart';
 import '../home/home_screen.dart';
 import '../map/map_view.dart';
+import 'alarm_actions.dart';
 
 String _formatEta(Duration duration) {
   if (duration.inHours >= 1) {
@@ -93,9 +95,19 @@ Future<int?> _pickRepeatDays(BuildContext context, int currentDays) {
 }
 
 class AlarmSetupScreen extends ConsumerStatefulWidget {
-  const AlarmSetupScreen({super.key, required this.place, required this.mode});
+  const AlarmSetupScreen({
+    super.key,
+    required this.place,
+    required this.mode,
+    this.initialAlarm,
+    this.editing = false,
+    this.duplicating = false,
+  });
   final Place place;
   final TravelMode mode;
+  final DestinationAlarm? initialAlarm;
+  final bool editing;
+  final bool duplicating;
   @override
   ConsumerState<AlarmSetupScreen> createState() => _AlarmSetupScreenState();
 }
@@ -111,6 +123,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   late TravelMode selectedMode;
   late double radius;
   late final TextEditingController radiusController;
+  late final TextEditingController labelController;
   String radiusUnit = 'm';
   String? radiusError;
   int repeatDays = 0;
@@ -123,10 +136,14 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     final settings = ref.read(settingsProvider);
     selectedPlace = widget.place;
     selectedMode = widget.mode;
-    radius = selectedMode.defaultAlertRadius;
+    radius = widget.initialAlarm?.radius ?? selectedMode.defaultAlertRadius;
+    repeatDays = widget.initialAlarm?.repeatDays ?? 0;
+    labelController = TextEditingController(
+      text: widget.initialAlarm?.label ?? '',
+    );
     radiusController = TextEditingController(text: radius.toInt().toString());
-    vibration = settings.vibration;
-    sound = settings.sound;
+    vibration = widget.initialAlarm?.vibration ?? settings.vibration;
+    sound = widget.initialAlarm?.sound ?? settings.sound;
     _refreshRequirements();
   }
 
@@ -134,6 +151,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     radiusController.dispose();
+    labelController.dispose();
     super.dispose();
   }
 
@@ -325,10 +343,29 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
               p.longitude == selectedPlace.longitude,
         );
     return Scaffold(
-      appBar: AppBar(title: const Text('Destination alarm')),
+      appBar: AppBar(
+        title: Text(
+          widget.editing
+              ? 'Edit alarm'
+              : widget.duplicating
+              ? 'Duplicate alarm'
+              : 'Destination alarm',
+        ),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          TextField(
+            controller: labelController,
+            maxLength: 80,
+            decoration: const InputDecoration(
+              labelText: 'Alarm name (optional)',
+              hintText: 'For example, Morning commute',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+
           SizedBox(
             height: 230,
             child: ClipRRect(
@@ -679,7 +716,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
               ),
             ),
           const SizedBox(height: 16),
-          if (alarm.alarms.length >= 10)
+          if ((alarm.alarms.length >= 10 && !widget.editing))
             const Padding(
               padding: EdgeInsets.only(bottom: 12),
               child: Text('Maximum 10 active alarms. End one to add another.'),
@@ -687,23 +724,46 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           FilledButton.icon(
             onPressed:
                 alarm.busy ||
-                        alarm.alarms.length >= 10 ||
+                        (alarm.alarms.length >= 10 && !widget.editing) ||
                         radiusError != null ||
                         checkingRequirements ||
-                        requirements?.ready != true
+                        (requirements?.ready != true &&
+                            !(widget.editing &&
+                                alarm.alarms.any(
+                                  (entry) =>
+                                      entry.alarm.id ==
+                                          widget.initialAlarm?.id &&
+                                      entry.status == 'paused',
+                                )))
                     ? null
                     : () async {
                       try {
-                        await ref
-                            .read(alarmProvider)
-                            .start(
-                              selectedPlace,
-                              radius,
-                              vibration,
-                              sound,
-                              null,
-                              repeatDays,
-                            );
+                        final controller = ref.read(alarmProvider);
+                        if (widget.editing) {
+                          await controller.updateAlarm(
+                            widget.initialAlarm!.id,
+                            selectedPlace,
+                            radius,
+                            vibration,
+                            sound,
+                            repeatDays,
+                            labelController.text,
+                          );
+                        } else {
+                          // Duplicating copies the displayed distance/repeat/sound settings;
+                          // review and Start create a new, independent alarm ID.
+                          await controller.start(
+                            selectedPlace,
+                            radius,
+                            vibration,
+                            sound,
+                            null,
+                            repeatDays,
+                            0,
+                            null,
+                            labelController.text,
+                          );
+                        }
                         if (context.mounted) {
                           context.go(
                             ref.read(alarmProvider).status == 'triggered'
@@ -727,11 +787,17 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
             icon: const Icon(Icons.notifications_active_outlined),
             label: Text(
               alarm.busy
-                  ? 'Starting…'
-                  : alarm.alarms.length >= 10
+                  ? (widget.editing ? 'Saving…' : 'Starting…')
+                  : (alarm.alarms.length >= 10 && !widget.editing)
                   ? 'Maximum 10 alarms active'
-                  : requirements?.ready == true
-                  ? 'Start alarm'
+                  : requirements?.ready == true ||
+                      (widget.editing &&
+                          alarm.alarms.any(
+                            (entry) =>
+                                entry.alarm.id == widget.initialAlarm?.id &&
+                                entry.status == 'paused',
+                          ))
+                  ? (widget.editing ? 'Save changes' : 'Start alarm')
                   : 'Complete required settings to start',
             ),
           ),
@@ -895,8 +961,11 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
             : 'Weak';
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Alarm active'),
+        title: Text(
+          alarmState.status == 'paused' ? 'Alarm paused' : 'Alarm active',
+        ),
         actions: [
+          AlarmActions(entry: alarmState.selected!),
           IconButton(
             tooltip: 'All alarms',
             onPressed: () => context.go('/?tab=alarms'),
@@ -921,7 +990,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
           ),
           Center(
             child: Text(
-              alarm.place.name,
+              alarm.displayName,
               style: Theme.of(
                 context,
               ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -942,7 +1011,9 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
             Center(child: Text('About ${_formatEta(eta)} at current speed')),
           Center(
             child: Text(
-              distance == null
+              alarmState.status == 'paused'
+                  ? 'Paused · resume to monitor this destination'
+                  : distance == null
                   ? 'Waiting for GPS'
                   : distance <= alarm.radius
                   ? 'Inside alert zone'
@@ -986,13 +1057,54 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                 ListTile(
                   leading: const Icon(Icons.gps_fixed),
                   title: const Text('GPS status'),
-                  subtitle: Text(alarmState.selected?.gpsStatus ?? quality),
+                  subtitle: Text(
+                    alarmState.status == 'paused'
+                        ? 'Monitoring paused for this alarm'
+                        : alarmState.selected?.gpsStatus ?? quality,
+                  ),
                 ),
+                ListTile(
+                  leading: const Icon(Icons.update),
+                  title: const Text('Last GPS update'),
+                  subtitle: Text(
+                    alarmState.selected?.lastGpsFixAt == null
+                        ? 'No GPS fix available'
+                        : '${_formatDateTime(
+                              context,
+                              alarmState.selected!.lastGpsFixAt!,
+                            )} · ${DateTime.now().difference(alarmState.selected!.lastGpsFixAt!).inSeconds.clamp(0, 999999)} s ago',
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.my_location),
+                  title: const Text('GPS accuracy'),
+                  subtitle: Text(
+                    alarmState.selected?.gpsAccuracy == null
+                        ? 'Unknown until a GPS fix arrives'
+                        : '±${alarmState.selected!.gpsAccuracy!.toStringAsFixed(0)} m',
+                  ),
+                ),
+                if (alarm.repeatDays != 0)
+                  ListTile(
+                    leading: const Icon(Icons.event_repeat),
+                    title: const Text('Next repeat day'),
+                    subtitle: Text(
+                      alarmState.status == 'paused'
+                          ? 'Paused · resume to enable repeats'
+                          : alarmState.selected?.nextRepeatAt == null
+                          ? 'Checking schedule…'
+                          : MaterialLocalizations.of(
+                            context,
+                          ).formatFullDate(alarmState.selected!.nextRepeatAt!),
+                    ),
+                  ),
                 ListTile(
                   leading: const Icon(Icons.radio_button_checked),
                   title: const Text('Alert radius'),
                   subtitle: Text(
-                    '${formatDistance(alarm.radius)} · ${alarmState.distanceFired
+                    '${formatDistance(alarm.radius)} · ${alarmState.status == 'paused'
+                        ? 'Paused'
+                        : alarmState.distanceFired
                         ? 'Rang'
                         : alarmState.selected?.distanceReady == false
                         ? 'Waiting for repeat day'
@@ -1011,7 +1123,9 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                   leading: const Icon(Icons.shield_outlined),
                   title: const Text('Background monitoring'),
                   subtitle: Text(
-                    alarmState.status == 'snoozed'
+                    alarmState.status == 'paused'
+                        ? 'Paused · this alarm will not ring until resumed'
+                        : alarmState.status == 'snoozed'
                         ? 'Snoozed'
                         : alarm.repeatDays != 0 &&
                             alarmState.selected?.distanceReady == false
@@ -1040,11 +1154,43 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap:
-                  alarmState.busy || alarmState.selected?.status != 'active'
+                  alarmState.busy ||
+                          (alarmState.selected?.status != 'active' &&
+                              alarmState.selected?.status != 'paused')
                       ? null
                       : () => _editRepeat(alarm.id, alarm.repeatDays),
             ),
           ),
+          if (alarmState.status == 'active' || alarmState.status == 'paused')
+            OutlinedButton.icon(
+              onPressed:
+                  alarmState.busy
+                      ? null
+                      : () async {
+                        try {
+                          await alarmState.pauseAlarm(
+                            alarm.id,
+                            alarmState.status != 'paused',
+                          );
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                alarmState.error ??
+                                    'Could not change pause setting.',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+              icon: Icon(
+                alarmState.status == 'paused' ? Icons.play_arrow : Icons.pause,
+              ),
+              label: Text(
+                alarmState.status == 'paused' ? 'Resume alarm' : 'Pause alarm',
+              ),
+            ),
           const SizedBox(height: 12),
           FilledButton.tonalIcon(
             onPressed: () => context.push('/setup', extra: alarm.place),
@@ -1066,7 +1212,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                                     ? 'End this trip?'
                                     : 'Stop this repeating alarm?',
                               ),
-                              content: Text(alarm.place.name),
+                              content: Text(alarm.displayName),
                               actions: [
                                 TextButton(
                                   onPressed:
@@ -1221,7 +1367,7 @@ class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen>
               ),
               const SizedBox(height: 12),
               Text(
-                alarm.place.name,
+                alarm.displayName,
                 style: Theme.of(context).textTheme.titleLarge,
                 textAlign: TextAlign.center,
               ),
@@ -1242,7 +1388,7 @@ class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen>
               if (waitingAlerts.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Next: ${waitingAlerts.first.alarm.place.name}'
+                  'Next: ${waitingAlerts.first.alarm.displayName}'
                   '${waitingAlerts.length > 1 ? ' (+${waitingAlerts.length - 1} more)' : ''}',
                   textAlign: TextAlign.center,
                 ),

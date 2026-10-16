@@ -81,6 +81,8 @@ class GuideScreen extends StatelessWidget {
           points: [
             'The starting alert distance is 500 m for Bus and Metro, and 1 km for Railway and Other. Choose a preset, move the slider, or enter 100–2000 m manually. The manual field lets you choose m or km; changing the unit does not change your typed number.',
             'Repeat is optional. Select the weekdays when the distance alarm should run. With no days selected, it is a one-time alarm. You can edit repeat days on the active alarm screen. If the first selected day is later, you can save the alarm without waiting for a GPS fix; keep the required permissions enabled for that day.',
+            'Use the alarm menu to Rename, Edit destination and settings, Duplicate, or Pause/Resume. Duplicate opens setup for review before creating a separate alarm. Paused alarms stay saved and do not ring until resumed; missed time reminders are skipped.',
+            'The active screen shows the last native GPS update, accuracy, and next repeat day. Unknown readings and paused schedules are labeled.',
             'You can keep up to ten alarms active, including several for one destination or different destinations. Use Add another alarm on the active screen or start from Home. Each alarm has its own radius and repeat days.',
           ],
         ),
@@ -92,6 +94,15 @@ class GuideScreen extends StatelessWidget {
             'Manual battery confirmation expires when you leave the app or after 15 minutes. Recheck No restrictions before confirming again. Zero alarm volume or Do Not Disturb may silence the alert; setup shows warnings for these settings.',
             'Keep phone location services on. If your phone has an Autostart control, allow this app there too. Some phones may still delay background GPS; choose a larger distance when travelling quickly.',
             'When the alarm rings, open its notification or the app to snooze or stop it. Alarms & reminders access lets short snoozes ring while the phone is idle. Force-stopping the app stops background monitoring.',
+          ],
+        ),
+        const _GuideSection(
+          icon: Icons.volume_up_outlined,
+          title: 'Test the alarm',
+          points: [
+            'Open Settings → Test alarm to preview the selected sound, vibration, and lock-screen notification. Tap Start test, then lock your phone during the five-second countdown.',
+            'The preview rings for ten seconds and stops automatically. Stop test is available in its notification and alarm screen. Real destination alerts take priority.',
+            'Allow alarm notifications and lock-screen alarms for the preview. It does not need GPS or register a destination.',
           ],
         ),
         const _GuideSection(

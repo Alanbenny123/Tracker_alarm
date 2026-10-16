@@ -17,6 +17,9 @@ import android.os.VibratorManager
 import org.robolectric.shadows.ShadowAlarmManager
 import org.robolectric.shadows.ShadowMediaPlayer
 import android.content.Context
+import android.os.Looper
+import java.util.Calendar
+import io.flutter.plugin.common.MethodChannel
 import android.content.Intent
 import android.location.Location
 import android.location.LocationManager
@@ -261,6 +264,141 @@ class AlarmRuntimeTest {
         parser.close()
         assertEquals(expected, domains["cloud-backup"])
         assertEquals(expected, domains["device-transfer"])
+    }
+
+    private class Result : MethodChannel.Result {
+        var error: String? = null
+        var success = false
+        override fun success(value: Any?) { success = true }
+        override fun error(code: String, message: String?, details: Any?) { error = code }
+        override fun notImplemented() { error = "missing" }
+    }
+
+    @Test fun pauseIsPersistedAndBlocksTimeGpsAndLateGeofenceTriggers() {
+        save(entry("paused").apply { alertAt = System.currentTimeMillis() + 60_000 })
+        MultiAlarmRuntime.refresh(app)
+        val result = Result()
+        MultiAlarmRuntime.pause(app, "paused", true, result)
+        assertTrue(result.success)
+        assertTrue(MultiAlarmRuntime.live(app).isEmpty())
+        assertEquals("paused", MultiAlarmRuntime.states(app).single()["status"])
+        MultiAlarmRuntime.trigger(app, "paused", "distance")
+        MultiAlarmRuntime.checkLocation(app, fix(0.0, 10_000))
+        ShadowSystemClock.advanceBy(Duration.ofMinutes(2))
+        MultiAlarmRuntime.checkDue(app)
+        assertNull(MultiAlarmRuntime.ringing(app))
+        val manager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        assertTrue(shadowOf(manager).scheduledAlarms.isEmpty())
+        assertTrue(MultiAlarmRuntime.clearFinished(app))
+        assertEquals("paused", MultiAlarmRuntime.states(app).single()["status"])
+    }
+
+    @Test fun pausingOneAlarmDoesNotPauseAnotherAndResumeRejectsOldCrossings() {
+        save(entry("paused").apply { paused = true }, entry("other", 0.02))
+        MultiAlarmRuntime.checkLocation(app, fix(-0.004, 0))
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
+        val resume = Result()
+        MultiAlarmRuntime.pause(app, "paused", false, resume)
+        assertTrue(resume.success)
+        val current = fix(0.004, 10_000).apply { time = System.currentTimeMillis() }
+        MultiAlarmRuntime.checkLocation(app, current)
+        assertNull(MultiAlarmRuntime.ringing(app))
+        MultiAlarmRuntime.checkLocation(app, Location(current).apply { longitude = 0.0 })
+        assertEquals("paused", MultiAlarmRuntime.ringing(app)?.id)
+        assertEquals("active", MultiAlarmRuntime.states(app).first { it["id"] == "other" }["status"])
+    }
+
+    @Test fun editKeepsIdentityOtherAlarmsAndPausedState() {
+        save(entry("edited").apply { paused = true }, entry("other", 0.02))
+        val result = Result()
+        MultiAlarmRuntime.update(app, mapOf("id" to "edited", "name" to "New stop", "address" to "Town",
+            "latitude" to 1.0, "longitude" to 2.0, "radius" to 750.0,
+            "sound" to "Digital", "vibration" to false, "repeatDays" to 0, "label" to "Commute"), result)
+        assertTrue(result.success)
+        val states = MultiAlarmRuntime.states(app)
+        assertEquals(2, states.size)
+        val edited = states.first { it["id"] == "edited" }
+        assertEquals("paused", edited["status"])
+        assertEquals("Commute", edited["label"])
+        assertEquals("New stop", edited["name"])
+        assertEquals(750.0, edited["radius"])
+        assertEquals("Digital", edited["sound"])
+        assertEquals(0.02, states.first { it["id"] == "other" }["longitude"])
+        val invalid = Result()
+        MultiAlarmRuntime.update(app, mapOf("id" to "edited", "name" to "Bad", "latitude" to 100.0,
+            "longitude" to 0.0, "radius" to 750.0, "repeatDays" to 0), invalid)
+        assertEquals("arguments", invalid.error)
+        assertEquals("New stop", MultiAlarmRuntime.states(app).first { it["id"] == "edited" }["name"])
+    }
+
+    @Test fun renameChangesTheAlertLabelWithoutChangingTheDestination() {
+        save(entry("named").apply { status = "triggered"; distanceFired = true })
+        val result = Result()
+        MultiAlarmRuntime.rename(app, "named", "Morning commute", result)
+        assertTrue(result.success)
+        val alarm = MultiAlarmRuntime.ringing(app)!!
+        assertEquals("Morning commute", alarm.displayName)
+        assertEquals("named", alarm.name)
+        assertEquals("Morning commute", MultiAlarmRuntime.alarmNotification(app, alarm).extras.getString(Notification.EXTRA_TEXT))
+        val pause = Result()
+        MultiAlarmRuntime.pause(app, "named", true, pause)
+        assertEquals("state", pause.error)
+    }
+
+    @Test fun nextRepeatDayAndNativeGpsDetailsAreReported() {
+        val day = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_MONTH, 1); set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val weekday = (day.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        save(entry("later").copy(repeatDays = 1 shl weekday, cycleDay = day.timeInMillis))
+        assertEquals(day.timeInMillis, MultiAlarmRuntime.states(app).single()["nextRepeatAt"])
+        save(entry("tracking", 0.02))
+        val controller = Robolectric.buildService(MultiTrackingService::class.java).create().startCommand(0, 1)
+        val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val position = fix(0.0, 10_000, 12f)
+        shadowOf(manager).simulateLocation(position)
+        shadowOf(Looper.getMainLooper()).idle()
+        val health = MultiTrackingService.health(app)
+        assertEquals(position.time, health["lastGpsFixAt"])
+        assertEquals(12.0, health["gpsAccuracy"])
+        controller.destroy()
+    }
+
+    @Test fun testAlarmIsIsolatedAndStopsAutomaticallyWithWakeLockCleanup() {
+        ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(1000, 0) }
+        save(entry("untouched", 0.02))
+        val before = app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE).getString("alarms", null)
+        val controller = Robolectric.buildService(TestAlarmService::class.java, Intent().putExtra("sound", "Bell").putExtra("vibration", false)).create()
+            .startCommand(0, 1)
+        val lock = ShadowPowerManager.getLatestWakeLock()
+        assertTrue(lock.isHeld)
+        assertFalse(TestAlarmService.isRinging())
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        assertTrue(TestAlarmService.isRinging())
+        val notification = shadowOf(controller.get()).lastForegroundNotification
+        assertEquals(TestAlarmActivity::class.java.name,
+            shadowOf(notification.fullScreenIntent).savedIntent.component?.className)
+        assertEquals(TestAlarmService.NOTIFICATION_ID, shadowOf(controller.get()).lastForegroundNotificationId)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(10))
+        assertFalse(TestAlarmService.isRinging())
+        assertFalse(lock.isHeld)
+        assertEquals(before, app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE).getString("alarms", null))
+        controller.destroy()
+    }
+
+    @Test fun realDestinationAlertStopsTheTestWithoutLosingItsOwnNotification() {
+        ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(1000, 0) }
+        save(entry("real", 0.02))
+        val test = Robolectric.buildService(TestAlarmService::class.java, Intent().putExtra("sound", "Bell")).create()
+            .startCommand(0, 1)
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(5))
+        assertTrue(TestAlarmService.isRinging())
+        save(entry("real").apply { status = "triggered"; distanceFired = true })
+        val tracking = Robolectric.buildService(MultiTrackingService::class.java).create().startCommand(0, 1)
+        assertFalse(TestAlarmService.isRinging())
+        assertEquals(MultiAlarmRuntime.ALARM_ID, shadowOf(tracking.get()).lastForegroundNotificationId)
+        tracking.destroy(); test.destroy()
     }
 
     @Test fun lockScreenActivityHasNoAppNavigationAndRejectsMissingAlarm() {

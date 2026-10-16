@@ -12,7 +12,7 @@ Destination Alarm rings when your phone reaches a chosen distance from a destina
 4. Tap **Confirm destination**. On the setup screen, check the place name and map. Tap **Reselect destination** if it is wrong.
 5. Choose the alert distance. The starting distance is **500 m** for Bus and Metro, and **1 km** for Railway and Other. You can use a preset, slider, or manual entry from **100 m to 2 km**. Manual entry has an **m / km** picker; changing the unit keeps the typed number, so check the resulting radius.
 6. Optional: open **Repeat** and choose the weekdays on which this distance alarm should run. Leave every day unselected for a one-time alarm. You can also select the alarm sound and vibration.
-7. Complete the phone settings shown on the setup screen: **precise location**, **Location: Allow all the time**, **notifications**, and **Unrestricted / No restrictions** battery use. If your phone has **Autostart**, allow this app there too.
+7. Give the alarm an optional name, such as Morning commute. Complete the phone settings shown on the setup screen: **precise location**, **Location: Allow all the time**, **notifications**, **Alarms & reminders**, **lock-screen alarms**, and **Unrestricted / No restrictions** battery use. If your phone has **Autostart**, allow this app there too.
 8. Tap **Start alarm**. The active screen shows remaining distance, GPS status, radius, and repeat days.
 
 ## Finding bus stops and stations
@@ -23,7 +23,7 @@ Use the search box to find an area, then select a result. The app loads stops ar
 
 ## Share a place from Google Maps
 
-In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen, then review the destination in setup. If the link contains no usable coordinates, the app may open place search so you can select the correct result. A shortened Google Maps link needs internet to resolve. Google Maps' downloaded offline maps cannot be imported into this app.
+In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen (up to 12 seconds), or tap Cancel. Then review the destination in setup. If the link contains no usable coordinates, the app may open place search so you can select the correct result. A shortened Google Maps link needs internet to resolve. Google Maps' downloaded offline maps cannot be imported into this app.
 
 ## Repeat and multiple alarms
 
@@ -53,3 +53,25 @@ After the destination is selected and the alarm starts, monitoring the saved coo
 | Alarm rings later than expected | GPS accuracy and the selected radius affect timing. Use a larger radius when travelling quickly. |
 
 Saved places are available under **Saved** and ended trips under **History**. You can use either to choose a destination again. The in-app **Guide & tutorial** is available from Home and Settings.
+
+## Test the alarm before travelling
+
+Open **Settings → Test alarm**. Check the displayed sound and vibration setting, then tap **Start test**. The test waits five seconds so you can lock your phone, rings for ten seconds, and stops automatically. **Stop test** is available in its notification and preview screen. Your destination alarms stay saved, and a real destination alert takes priority over the test. Enable alarm notifications and lock-screen alarms when prompted. The preview does not need a GPS fix.
+
+## Name, pause, edit, and duplicate
+
+- Use **Alarm name** in setup or **Rename** in an alarm’s menu to add a label. The destination name and coordinates stay attached to the alarm.
+- Use **Pause** in its menu, or **Pause alarm** on the active screen, to suspend that alarm. It stays in your alarm list and persists after restarting the app. Use **Resume** to restart it. Other destinations continue monitoring. Time reminders missed while paused are skipped, and repeat alarms catch up to the current selected day.
+- Use **Edit destination and settings** to reselect the destination or change distance, repeat weekdays, sound, vibration, or name. **Save changes** keeps the existing alarm ID. Paused alarms stay paused after editing.
+- Use **Duplicate** to open a new setup with the destination, distance, repeat weekdays, sound, vibration, and name filled in. Review and tap **Start alarm** to create a separate alarm. You can cancel setup without creating the copy.
+- Handle ringing or snoozed alerts before editing or pausing them.
+
+## GPS and repeat details
+
+Open an alarm to see its last native GPS update, reported accuracy, and next repeat day. A missing reading is shown as unknown. Paused alarms show that repeats and monitoring are suspended.
+
+Manual battery confirmation, for phones whose vendor setting Android cannot verify, expires when you leave the app or after 15 minutes. Reopen battery settings before confirming again.
+
+## Local data
+
+The latest 100 trips are kept locally. **Clear trip history** in History or Settings removes trips and their recovery copies. **Clear saved places** removes bookmarks and their recovery copies. Active alarms are kept. Settings also lets you delete damaged recovery copies after reviewing any repaired data. App data is excluded from Android cloud backup and device transfer; this does not delete backups made by older app versions.

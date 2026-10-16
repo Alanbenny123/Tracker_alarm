@@ -321,6 +321,9 @@ class AlarmProgress {
     this.monitoringHealthy,
     this.gpsStatus,
     this.geofenceStatus,
+    this.lastGpsFixAt,
+    this.gpsAccuracy,
+    this.nextRepeatAt,
   });
 
   final DestinationAlarm alarm;
@@ -334,9 +337,15 @@ class AlarmProgress {
   final bool? monitoringHealthy;
   final String? gpsStatus;
   final String? geofenceStatus;
+  final DateTime? lastGpsFixAt;
+  final double? gpsAccuracy;
+  final DateTime? nextRepeatAt;
 
   bool get live =>
-      status == 'active' || status == 'triggered' || status == 'snoozed';
+      status == 'active' ||
+      status == 'triggered' ||
+      status == 'snoozed' ||
+      status == 'paused';
 }
 
 class AlarmController extends ChangeNotifier {
@@ -381,6 +390,7 @@ class AlarmController extends ChangeNotifier {
     return AlarmProgress(
       alarm: DestinationAlarm(
         id: state['id'] as String,
+        label: state['label'] as String? ?? '',
         place: Place(
           name: state['name'] as String,
           address: state['address'] as String? ?? '',
@@ -416,6 +426,19 @@ class AlarmController extends ChangeNotifier {
       monitoringHealthy: state['monitoringHealthy'] as bool?,
       gpsStatus: state['gpsStatus'] as String?,
       geofenceStatus: state['geofenceStatus'] as String?,
+      lastGpsFixAt:
+          state['lastGpsFixAt'] == null
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(
+                (state['lastGpsFixAt'] as num).toInt(),
+              ),
+      gpsAccuracy: (state['gpsAccuracy'] as num?)?.toDouble(),
+      nextRepeatAt:
+          state['nextRepeatAt'] == null
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(
+                (state['nextRepeatAt'] as num).toInt(),
+              ),
     );
   }
 
@@ -461,7 +484,9 @@ class AlarmController extends ChangeNotifier {
       '${entry.alarm.id}:${entry.status}:${entry.timeFired}:'
       '${entry.distanceFired}:${entry.distanceReady}:${entry.alarm.alertAt}:'
       '${entry.triggerReason}:${entry.triggeredAt}:${entry.monitoringMessage}:'
-      '${entry.monitoringHealthy}:${entry.gpsStatus}:${entry.geofenceStatus}';
+      '${entry.monitoringHealthy}:${entry.gpsStatus}:${entry.geofenceStatus}:'
+      '${entry.lastGpsFixAt}:${entry.gpsAccuracy}:${entry.nextRepeatAt}:'
+      '${entry.alarm.label}:${entry.alarm.place.toJson()}:${entry.alarm.radius}:${entry.alarm.sound}:${entry.alarm.vibration}:${entry.alarm.repeatDays}';
 
   Future<void> restore() async {
     try {
@@ -544,7 +569,9 @@ class AlarmController extends ChangeNotifier {
     int repeatDays = 0,
     int leadMinutes = 0,
     DateTime? repeatStartDay,
+    String label = '',
   ]) async {
+    if (busy) throw StateError('An alarm change is already in progress.');
     busy = true;
     error = null;
     notifyListeners();
@@ -573,6 +600,7 @@ class AlarmController extends ChangeNotifier {
       final alarm = DestinationAlarm(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         place: place,
+        label: label.trim(),
         radius: radius,
         vibration: vibration,
         sound: sound,
@@ -607,6 +635,70 @@ class AlarmController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  Future<void> _manage(Future<void> Function() action) async {
+    if (busy) throw StateError('An alarm change is already in progress.');
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      await action();
+      await _applyNativeStates(await _geofence.multiStates());
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> renameAlarm(String id, String label) =>
+      _manage(() => _geofence.renameAlarm(id, label.trim()));
+
+  Future<void> pauseAlarm(String id, bool paused) => _manage(() async {
+    if (!paused) {
+      final requirements = await _geofence.requirements();
+      if (!requirements.ready) {
+        throw LocationException(requirements.missingMessage);
+      }
+    }
+    await _geofence.pauseAlarm(id, paused);
+  });
+
+  Future<void> updateAlarm(
+    String id,
+    Place place,
+    double radius,
+    bool vibration,
+    String sound,
+    int days,
+    String label,
+  ) => _manage(() async {
+    final latest = await _geofence.multiStates();
+    await _applyNativeStates(latest);
+    final current = _entries.where((entry) => entry.alarm.id == id).firstOrNull;
+    if (current == null ||
+        (current.status != 'active' && current.status != 'paused')) {
+      throw StateError('Stop the ringing alert before editing this alarm.');
+    }
+    if (current.status != 'paused') {
+      final requirements = await _geofence.requirements();
+      if (!requirements.ready) {
+        throw LocationException(requirements.missingMessage);
+      }
+    }
+    await _geofence.updateAlarm(
+      id,
+      place,
+      radius,
+      vibration,
+      sound,
+      days,
+      label.trim(),
+    );
+    _selectedId = id;
+  });
 
   Future<void> cancel([String? id]) => _finish('cancelled', id);
   Future<void> stop([String? id]) => _finish('completed', id);
@@ -690,6 +782,7 @@ class AlarmController extends ChangeNotifier {
             .where(
               (entry) =>
                   entry.live &&
+                  entry.status != 'paused' &&
                   entry.distanceReady &&
                   !entry.distanceFired &&
                   position.accuracy <= entry.alarm.radius &&

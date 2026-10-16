@@ -12,6 +12,8 @@ import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../services/storage_service.dart';
 import '../map/map_view.dart';
+import '../alarm/alarm_actions.dart';
+import '../alarm/test_alarm_button.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key, this.initialIndex = 0});
@@ -312,7 +314,7 @@ class _HomeTab extends ConsumerWidget {
               .map(
                 (trip) => ListTile(
                   leading: const Icon(Icons.place_outlined),
-                  title: Text(trip.alarm.place.name),
+                  title: Text(trip.alarm.displayName),
                   subtitle: Text(
                     '${trip.status} · ${trip.endedAt.toLocal().toString().substring(0, 16)}',
                   ),
@@ -428,9 +430,13 @@ class _ActiveAlarmCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Card(
     child: ListTile(
       leading: Icon(
-        entry.status == 'snoozed' ? Icons.snooze : Icons.notifications_active,
+        entry.status == 'paused'
+            ? Icons.pause_circle_outline
+            : entry.status == 'snoozed'
+            ? Icons.snooze
+            : Icons.notifications_active,
       ),
-      title: Text(entry.alarm.place.name),
+      title: Text(entry.alarm.displayName),
       subtitle: Text(
         '${formatDistance(entry.alarm.radius)} · '
         '${entry.alarm.alertAt == null ? 'Distance only' : '${MaterialLocalizations.of(context).formatMediumDate(entry.alarm.alertAt!)} '
@@ -438,6 +444,8 @@ class _ActiveAlarmCard extends ConsumerWidget {
         '${entry.alarm.repeatDays == 0 ? '' : 'Repeats ${repeatDaysLabel(entry.alarm.repeatDays)} · '}'
         '${entry.status == 'triggered'
             ? 'Ringing'
+            : entry.status == 'paused'
+            ? 'Paused'
             : entry.status == 'snoozed'
             ? 'Snoozed'
             : entry.alarm.repeatDays != 0 && !entry.distanceReady
@@ -446,7 +454,7 @@ class _ActiveAlarmCard extends ConsumerWidget {
             ? 'Needs attention'
             : 'Monitoring'}',
       ),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: AlarmActions(entry: entry),
       onTap: () {
         ref.read(alarmProvider).select(entry.alarm.id);
         context.push(entry.status == 'triggered' ? '/triggered' : '/active');
@@ -561,7 +569,7 @@ class _HistoryTab extends ConsumerWidget {
                                   ? Icons.check_circle_outline
                                   : Icons.cancel_outlined,
                             ),
-                            title: Text(trip.alarm.place.name),
+                            title: Text(trip.alarm.displayName),
                             subtitle: Text(
                               '${trip.endedAt.toLocal().toString().substring(0, 16)} · ${trip.alarm.radius.toInt()} m · ${trip.status}',
                             ),
@@ -624,6 +632,7 @@ class _SettingsTab extends ConsumerWidget {
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
+          const TestAlarmButton(),
           const ListTile(
             title: Text('Starting alert radius'),
             subtitle: Text('Bus and Metro: 500 m · Railway and Other: 1 km'),

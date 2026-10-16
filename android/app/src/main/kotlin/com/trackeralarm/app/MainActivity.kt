@@ -55,6 +55,35 @@ class MainActivity : FlutterActivity() {
         acceptShare(intent)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/geofence").setMethodCallHandler { call, result ->
             when (call.method) {
+                "testAlarmStop" -> { TestAlarmService.stop(this); result.success(null) }
+                "testAlarmStart" -> {
+                    if (!AlarmReadiness.notificationsReady(this) || !AlarmReadiness.fullScreenReady(this)) {
+                        result.error("permission", "Allow alarm notifications and lock-screen alarms before testing.", null)
+                    } else if (MultiAlarmRuntime.ringing(this) != null) {
+                        result.error("state", "Stop the ringing destination alert before testing.", null)
+                    } else try {
+                        val service = Intent(this, TestAlarmService::class.java)
+                            .putExtra("sound", call.argument<String>("sound") ?: "Default alarm")
+                            .putExtra("vibration", call.argument<Boolean>("vibration") ?: true)
+                        if (Build.VERSION.SDK_INT >= 26) startForegroundService(service) else startService(service)
+                        result.success(null)
+                    } catch (_: Exception) { result.error("test", "Could not start the test alarm", null) }
+                }
+                "multiRename" -> MultiAlarmRuntime.rename(this, call.argument<String>("id") ?: "", call.argument<String>("label") ?: "", result)
+                "multiPause" -> {
+                    val paused = call.argument<Boolean>("paused") ?: true
+                    val settings = AlarmReadiness.values(this, batteryConfirmation.valid())
+                    val ready = listOf("preciseLocation", "backgroundLocation", "notifications", "exactAlarms", "fullScreenAlarms")
+                        .all { settings[it] == true } && (settings["batteryOptimizationOff"] == true || settings["batteryManuallyConfirmed"] == true)
+                    if (!paused && !ready) result.error("permission", "Complete the phone settings in alarm setup before resuming.", null)
+                    else MultiAlarmRuntime.pause(this, call.argument<String>("id") ?: "", paused, result)
+                }
+                "multiUpdate" -> {
+                    @Suppress("UNCHECKED_CAST")
+                    val args = call.arguments as? Map<String, Any>
+                    if (args == null) result.error("arguments", "Missing alarm settings", null)
+                    else MultiAlarmRuntime.update(this, args, result)
+                }
                 "multiClearFinished" -> {
                     if (MultiAlarmRuntime.clearFinished(this)) result.success(null)
                     else result.error("storage", "Could not clear finished alarms", null)

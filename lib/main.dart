@@ -76,7 +76,13 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
                     place: extra as Place,
                     mode: TravelMode.other,
                   );
-          return AlarmSetupScreen(place: args.place, mode: args.mode);
+          return AlarmSetupScreen(
+            place: args.place,
+            mode: args.mode,
+            initialAlarm: args.initialAlarm,
+            editing: args.editing,
+            duplicating: args.duplicating,
+          );
         },
       ),
       GoRoute(
