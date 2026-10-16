@@ -80,6 +80,7 @@ class GuideScreen extends StatelessWidget {
           title: 'Distance, repeat, and multiple alarms',
           points: [
             'The starting alert distance is 500 m for Bus and Metro, and 1 km for Railway and Other. Choose a preset, move the slider, or enter 100–2000 m manually. The manual field lets you choose m or km; changing the unit does not change your typed number.',
+            'The displayed distance is straight-line GPS distance. Roads and railway routes can be longer. Speed-based estimates also use this direct distance.',
             'Repeat is optional. Select the weekdays when the distance alarm should run. With no days selected, it is a one-time alarm. You can edit repeat days on the active alarm screen. If the first selected day is later, you can save the alarm without waiting for a GPS fix; keep the required permissions enabled for that day.',
             'Use the alarm menu to Rename, Edit destination and settings, Duplicate, or Pause/Resume. Duplicate opens setup for review before creating a separate alarm. Paused alarms stay saved and do not ring until resumed; missed time reminders are skipped.',
             'The active screen shows the last native GPS update, accuracy, and next repeat day. Unknown readings and paused schedules are labeled.',
@@ -128,6 +129,9 @@ class GuideScreen extends StatelessWidget {
           title: 'If search or an alarm has a problem',
           points: [
             'If a stop or place search fails, tap Retry search beside the error. Check your connection, then try another area or a point on the map if needed. Public stop data and server availability vary.',
+            'If no places match, check spelling or search a nearby town or landmark. Enter at least three characters. An empty stop list means no mapped, named stops were found in that search radius.',
+            'If map tiles fail, reconnect and tap Retry map. The warning clears when visible tiles load successfully. GPS monitoring continues without the map.',
+            'On small screens or with large text, scroll the ringing screen and selection sheets to reach the remaining actions and choices.',
             'If Near me waits for GPS, turn on location services or search an area instead. The GPS status on the active screen shows when reception is weak.',
             'If the phone stays silent while locked, recheck background location, notifications, Alarms & reminders, lock-screen alarms, and unrestricted battery use. A small alert radius or poor GPS reception can delay an alarm.',
           ],

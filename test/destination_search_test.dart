@@ -43,6 +43,78 @@ class _Stops extends TransitStopsService {
 }
 
 void main() {
+  testWidgets(
+    'empty place search explains recovery and clears on a new query',
+    (tester) async {
+      final places = _Places();
+      final stops = _Stops();
+      await tester.pumpWidget(_app(places, stops, TravelMode.bus));
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Missing town');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      places.requests.single.complete([]);
+      await tester.pump();
+      expect(
+        find.textContaining('No places found for “Missing town”'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('No mapped'), findsNothing);
+      // An earlier stop request cannot replace this newer empty result.
+      stops.requests.single.complete([stationA]);
+      await tester.pump();
+      expect(find.text('Station A'), findsNothing);
+      await tester.enterText(find.byType(TextField), 'New town');
+      await tester.pump();
+      expect(find.textContaining('No places found'), findsNothing);
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      places.requests.last.complete([stationB]);
+      await tester.pump();
+      expect(find.text('Station B'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'empty stop searches explain coverage and respect each search radius',
+    (tester) async {
+      final places = _Places();
+      final stops = _Stops();
+      await tester.pumpWidget(_app(places, stops, TravelMode.bus));
+      await tester.pump();
+      stops.requests.single.complete([]);
+      await tester.pump();
+      expect(
+        find.textContaining('No mapped bus stops found within 2.5 km'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Railway'));
+      await tester.pump();
+      stops.requests.last.complete([]);
+      await tester.pump();
+      expect(
+        find.textContaining('No mapped railway stations found within 5 km'),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('short queries show guidance without making a request', (
+    tester,
+  ) async {
+    final places = _Places();
+    final stops = _Stops();
+    await tester.pumpWidget(_app(places, stops));
+    await tester.enterText(find.byType(TextField), 'ab');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    expect(find.text('Enter at least 3 characters to search.'), findsOneWidget);
+    expect(places.requests, isEmpty);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('choosing a map point invalidates a pending place search', (
     tester,
   ) async {

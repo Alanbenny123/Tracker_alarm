@@ -10,6 +10,7 @@ import '../../models/place.dart';
 import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
+import '../../widgets/scrollable_sheet.dart';
 import '../../services/storage_service.dart';
 import '../map/map_view.dart';
 import '../alarm/alarm_actions.dart';
@@ -687,7 +688,7 @@ class _SettingsTab extends ConsumerWidget {
                 () => showModalBottomSheet<void>(
                   context: context,
                   builder:
-                      (context) => SafeArea(
+                      (context) => ScrollableSheet(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children:
@@ -803,7 +804,7 @@ class _SettingsTab extends ConsumerWidget {
       showModalBottomSheet<void>(
         context: context,
         builder:
-            (context) => SafeArea(
+            (context) => ScrollableSheet(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

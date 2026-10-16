@@ -8,6 +8,7 @@ import 'package:tracker_alarm/features/alarm/test_alarm_button.dart';
 import 'package:tracker_alarm/main.dart';
 import 'package:tracker_alarm/models/alarm_setup_args.dart';
 import 'package:tracker_alarm/models/destination_alarm.dart';
+import 'package:tracker_alarm/models/travel_mode.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
 import 'package:tracker_alarm/services/geofence_service.dart';
 
@@ -15,6 +16,80 @@ import 'helpers/alarm_fakes.dart';
 import 'helpers/raw_memory_storage.dart';
 
 void main() {
+  testWidgets(
+    'repeat, sound and unit choices remain reachable on small screens',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 480);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final store = RawMemoryStorage();
+      final native = FakeNative();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            storageProvider.overrideWith((ref) => store),
+            geofenceProvider.overrideWithValue(native),
+            locationServiceProvider.overrideWithValue(FakeLocation()),
+          ],
+          child: MaterialApp(
+            theme: createAppTheme(Brightness.light),
+            builder:
+                (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: const TextScaler.linear(2)),
+                  child: child!,
+                ),
+            home: const AlarmSetupScreen(place: stationA, mode: TravelMode.bus),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Scroll in the margin so the form moves instead of panning the map.
+      Future<void> reveal(Finder target) async {
+        for (var i = 0; i < 30 && target.evaluate().isEmpty; i++) {
+          await tester.dragFrom(const Offset(5, 350), const Offset(0, -230));
+          await tester.pumpAndSettle();
+        }
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
+      }
+
+      await reveal(find.text('m'));
+      await tester.tap(find.text('m'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Kilometres (km)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Kilometres (km)'));
+      await tester.pumpAndSettle();
+      expect(find.text('km'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await reveal(find.text('Repeat'));
+      await tester.tap(find.text('Repeat'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Sun'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sun'));
+      await tester.ensureVisible(find.text('Save'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sun'), findsOneWidget);
+      await reveal(find.text('Alarm sound'));
+      await tester.tap(find.text('Alarm sound'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Wake up'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Wake up'));
+      await tester.pumpAndSettle();
+      expect(find.text('Wake up'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
   test('alarm names survive storage and leave destination names intact', () {
     final alarm = _alarm();
     final copy = DestinationAlarm.fromJson(alarm.toJson());

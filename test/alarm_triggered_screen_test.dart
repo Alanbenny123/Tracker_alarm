@@ -11,6 +11,13 @@ import 'helpers/alarm_fakes.dart';
 class _CountingNative extends FakeNative {
   int polls = 0;
   @override
+  Future<void> multiSnooze(String id, int minutes) async {
+    entry(id)['status'] = 'snoozed';
+    entry(id)['snoozeUntil'] =
+        DateTime.now().add(Duration(minutes: minutes)).millisecondsSinceEpoch;
+  }
+
+  @override
   Future<List<Map<String, dynamic>>> multiStates() {
     polls++;
     return super.multiStates();
@@ -18,6 +25,51 @@ class _CountingNative extends FakeNative {
 }
 
 void main() {
+  testWidgets(
+    'small ringing screen and snooze sheet remain usable with large text',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 480);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final storage = MemoryStorage();
+      final native = _CountingNative();
+      final controller = AlarmController(
+        storage,
+        native,
+        FakeLocation(),
+        HistoryController(storage),
+      );
+      await controller.restore();
+      await controller.start(stationA, 500, true, 'Bell');
+      final id = controller.active!.id;
+      await controller.renameAlarm(
+        id,
+        'A very long destination name for the morning commute',
+      );
+      await native.multiTrigger(id);
+      await controller.syncStatus();
+      final router = _router();
+      await tester.pumpWidget(_app(controller, router, textScale: 2.5));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('Snooze'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Snooze'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester.ensureVisible(find.text('5 minutes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('5 minutes'));
+      await tester.pumpAndSettle();
+      expect(native.entry(id)['status'], 'snoozed');
+      expect(find.text('Active trip'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      router.dispose();
+    },
+  );
+
   testWidgets(
     'ringing screen follows notification dismissal and the next alert',
     (tester) async {
@@ -112,10 +164,21 @@ GoRouter _router() => GoRouter(
   ],
 );
 
-Widget _app(AlarmController controller, GoRouter router) => ProviderScope(
+Widget _app(
+  AlarmController controller,
+  GoRouter router, {
+  double textScale = 1,
+}) => ProviderScope(
   overrides: [alarmProvider.overrideWith((ref) => controller)],
   child: MaterialApp.router(
     theme: createAppTheme(Brightness.light),
+    builder:
+        (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
     routerConfig: router,
   ),
 );

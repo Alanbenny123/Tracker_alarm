@@ -17,6 +17,7 @@ class MapView extends StatefulWidget {
     this.onPlaceTap,
     this.onDestinationDrag,
     this.interactive = true,
+    this.tileProvider,
   });
   final Position? position;
   final Place? destination;
@@ -27,6 +28,7 @@ class MapView extends StatefulWidget {
   final void Function(Place)? onPlaceTap;
   final void Function(LatLng)? onDestinationDrag;
   final bool interactive;
+  final TileProvider? tileProvider;
 
   @override
   State<MapView> createState() => _MapViewState();
@@ -36,6 +38,36 @@ class _MapViewState extends State<MapView> {
   final MapController controller = MapController();
   bool tilesUnavailable = false;
   bool draggingPin = false;
+  int _tileGeneration = 0;
+  // TileImage compares by coordinates, so retries need identity keys to keep
+  // replacement images separate from the failed images being unmounted.
+  final _renderedTiles = Map<TileImage, int>.identity();
+  bool _healthCheckQueued = false;
+
+  void _checkTileHealth() {
+    if (_healthCheckQueued || !mounted) return;
+    _healthCheckQueued = true;
+    // Tile notifications can arrive during layout, including cache hits.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _healthCheckQueued = false;
+      if (!mounted) return;
+      final zoom = controller.camera.zoom.round().clamp(0, 19);
+      final current = _renderedTiles.keys.where(
+        (tile) => tile.coordinates.z == zoom,
+      );
+      final failed = current.any((tile) => tile.loadError);
+      final loaded = current.any(
+        (tile) => tile.imageInfo != null && !tile.loadError,
+      );
+      // Keep the warning while a retry is loading. Old zooms and tiles removed
+      // from the viewport must not make a recovered map look unavailable.
+      final unavailable = failed || (!loaded && tilesUnavailable);
+      if (tilesUnavailable != unavailable) {
+        setState(() => tilesUnavailable = unavailable);
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
 
   @override
   void dispose() {
@@ -123,16 +155,37 @@ class _MapViewState extends State<MapView> {
           ),
           children: [
             TileLayer(
+              tileProvider: widget.tileProvider,
+              key: ValueKey(_tileGeneration),
+              evictErrorTileStrategy: EvictErrorTileStrategy.dispose,
               urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.trackeralarm.app',
               maxZoom: 19,
-              errorTileCallback: (_, _, _) {
-                if (!tilesUnavailable) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => tilesUnavailable = true);
-                  });
-                }
-              },
+              errorTileCallback: (_, _, _) => _checkTileHealth(),
+              tileBuilder:
+                  (context, child, tile) => _ObservedTile(
+                    key: ObjectKey(tile),
+                    tile: tile,
+                    onMount: () {
+                      _renderedTiles.update(
+                        tile,
+                        (count) => count + 1,
+                        ifAbsent: () => 1,
+                      );
+                      _checkTileHealth();
+                    },
+                    onUnmount: () {
+                      final count = _renderedTiles[tile] ?? 0;
+                      if (count <= 1) {
+                        _renderedTiles.remove(tile);
+                      } else {
+                        _renderedTiles[tile] = count - 1;
+                      }
+                      _checkTileHealth();
+                    },
+                    onChanged: _checkTileHealth,
+                    child: child,
+                  ),
             ),
             if (widget.destination != null)
               CircleLayer(
@@ -256,14 +309,30 @@ class _MapViewState extends State<MapView> {
         if (tilesUnavailable)
           Positioned(
             left: 8,
-            right: 8,
+            right: widget.interactive ? 76 : 8,
             top: 8,
             child: Material(
               color: Theme.of(context).colorScheme.errorContainer,
               borderRadius: BorderRadius.circular(8),
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('Map unavailable. GPS alarm will continue.'),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Some map tiles could not load. GPS alarms still work.',
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        // Recreate only the tile layer, preserving map position.
+                        setState(() => _tileGeneration++);
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry map'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -310,6 +379,44 @@ class _MapViewState extends State<MapView> {
       ],
     );
   }
+}
+
+class _ObservedTile extends StatefulWidget {
+  const _ObservedTile({
+    super.key,
+    required this.tile,
+    required this.child,
+    required this.onMount,
+    required this.onUnmount,
+    required this.onChanged,
+  });
+  final TileImage tile;
+  final Widget child;
+  final VoidCallback onMount;
+  final VoidCallback onUnmount;
+  final VoidCallback onChanged;
+
+  @override
+  State<_ObservedTile> createState() => _ObservedTileState();
+}
+
+class _ObservedTileState extends State<_ObservedTile> {
+  @override
+  void initState() {
+    super.initState();
+    widget.tile.addListener(widget.onChanged);
+    widget.onMount();
+  }
+
+  @override
+  void dispose() {
+    widget.tile.removeListener(widget.onChanged);
+    widget.onUnmount();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _MapButton extends StatelessWidget {

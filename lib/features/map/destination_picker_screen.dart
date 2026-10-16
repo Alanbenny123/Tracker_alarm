@@ -48,6 +48,9 @@ class _DestinationPickerScreenState
   _SearchErrorSource? errorSource;
   bool searching = false;
   bool loadingStops = false;
+  String? emptyPlaceQuery;
+  bool stopsLoaded = false;
+  String? queryHint;
 
   @override
   void initState() {
@@ -85,6 +88,9 @@ class _DestinationPickerScreenState
     stopsService.cancel();
     searching = false;
     loadingStops = false;
+    emptyPlaceQuery = null;
+    stopsLoaded = false;
+    queryHint = null;
   }
 
   void _queryChanged(String _) {
@@ -107,6 +113,8 @@ class _DestinationPickerScreenState
       stops = [];
       selected = null;
       searching = text.length >= 3;
+      queryHint =
+          text.length < 3 ? 'Enter at least 3 characters to search.' : null;
       error = null;
       errorSource = null;
     });
@@ -117,6 +125,7 @@ class _DestinationPickerScreenState
       setState(() {
         results = found;
         searching = false;
+        emptyPlaceQuery = found.isEmpty ? text : null;
       });
     } catch (e) {
       if (!mounted || generation != searchGeneration) return;
@@ -185,6 +194,7 @@ class _DestinationPickerScreenState
       setState(() {
         stops = found;
         loadingStops = false;
+        stopsLoaded = true;
       });
     } catch (e) {
       if (!mounted || generation != searchGeneration) return;
@@ -334,6 +344,14 @@ class _DestinationPickerScreenState
                   ),
                   if (searching) const LinearProgressIndicator(),
                   if (loadingStops) const LinearProgressIndicator(),
+                  if (queryHint != null || emptyPlaceQuery != null)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(
+                        queryHint ??
+                            'No places found for “$emptyPlaceQuery”. Check the spelling or search a nearby town or landmark.',
+                      ),
+                    ),
                   if (error != null)
                     Padding(
                       padding: const EdgeInsets.all(12),
@@ -379,7 +397,13 @@ class _DestinationPickerScreenState
               ),
             ),
           ),
-          if (mode.usesStops && selected == null && results.isEmpty)
+          if (mode.usesStops &&
+              selected == null &&
+              results.isEmpty &&
+              !searching &&
+              emptyPlaceQuery == null &&
+              errorSource != _SearchErrorSource.place &&
+              queryHint == null)
             Positioned(
               left: 12,
               right: 12,
@@ -413,7 +437,8 @@ class _DestinationPickerScreenState
                       Expanded(
                         child:
                             stops.isEmpty
-                                ? Center(
+                                ? SingleChildScrollView(
+                                  padding: const EdgeInsets.all(12),
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -422,9 +447,9 @@ class _DestinationPickerScreenState
                                             ? 'Finding mapped stops…'
                                             : error != null
                                             ? 'Could not load stops in this area.'
-                                            : areaCenter == null
+                                            : !stopsLoaded
                                             ? 'Search an area or tap the map.'
-                                            : 'No mapped stops found here. Try another area.',
+                                            : 'No mapped ${mode.placeName.toLowerCase()} found within ${mode == TravelMode.railway ? '5' : '2.5'} km. Search another area or tap a different point on the map.',
                                         textAlign: TextAlign.center,
                                       ),
                                     ],

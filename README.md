@@ -53,3 +53,7 @@ Settings → **Test alarm** previews the selected sound, vibration, and lock-scr
 Active alarm details show the native last GPS update and accuracy, plus the next selected repeat day. Unknown readings are labeled rather than inferred from a saved alarm.
 
 The alarm menu offers Rename, Edit destination and settings, Duplicate, and Pause/Resume. An optional name is also available during setup. Paused alarms remain saved and listed, but do not trigger GPS, geofence, time, or repeat alerts until resumed. Other alarms keep running. Time reminders that passed while paused are skipped on resume. Edits preserve the alarm ID and progress of unchanged conditions; changing the destination or radius resets its distance condition. Editing is available while active or paused. Duplicate opens a new distance-alarm setup with the original destination, radius, repeat weekdays, name, sound and vibration, and creates a separate alarm only after Start. Improvement-batch progress is recorded in [IMPROVEMENTS.md](docs/IMPROVEMENTS.md).
+
+## Distance display and recovery
+
+Setup and active monitoring show straight-line GPS distance, which can be shorter than the road or railway route. Speed-based estimates use that direct distance. Ringing controls and selection sheets scroll on short screens and with large text. Empty place/stop searches explain how to try another query or area; transit messages show the corresponding search radius. The map warning follows currently rendered tiles, clears after successful loading, and offers **Retry map** without interrupting GPS alarms.

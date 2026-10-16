@@ -13,13 +13,15 @@ Destination Alarm rings when your phone reaches a chosen distance from a destina
 5. Choose the alert distance. The starting distance is **500 m** for Bus and Metro, and **1 km** for Railway and Other. You can use a preset, slider, or manual entry from **100 m to 2 km**. Manual entry has an **m / km** picker; changing the unit keeps the typed number, so check the resulting radius.
 6. Optional: open **Repeat** and choose the weekdays on which this distance alarm should run. Leave every day unselected for a one-time alarm. You can also select the alarm sound and vibration.
 7. Give the alarm an optional name, such as Morning commute. Complete the phone settings shown on the setup screen: **precise location**, **Location: Allow all the time**, **notifications**, **Alarms & reminders**, **lock-screen alarms**, and **Unrestricted / No restrictions** battery use. If your phone has **Autostart**, allow this app there too.
-8. Tap **Start alarm**. The active screen shows remaining distance, GPS status, radius, and repeat days.
+8. Tap **Start alarm**. The active screen shows straight-line distance, GPS status, radius, and repeat days. Distance is measured directly to the destination; road and railway routes may be longer. Any speed-based estimate uses that same direct distance.
 
 ## Finding bus stops and stations
 
 Bus and Metro search within **2.5 km** of the chosen area. Railway searches within **5 km**. These results come from mapped, named OpenStreetMap places. A real stop may be missing if it has not been mapped or named. Searches need internet.
 
 Use the search box to find an area, then select a result. The app loads stops around that area. You can also tap another map area. If a search fails, the error appears by the search box with **Retry search**. Retry repeats the failed place or stop search. If the server remains busy, search another area or use **Other** and choose a map point.
+
+If no places match your search, check the spelling or search a nearby town or landmark. Enter at least three characters. An empty stop list means no named stops for that transport were found within the displayed radius; try another area or use **Other** to select a map point.
 
 ## Share a place from Google Maps
 
@@ -39,7 +41,9 @@ After restarting the phone, check the app's notification. If it says an alert ne
 
 The app uses background location monitoring, a foreground service, and an Android geofence backup where available. Keep the required permissions and unrestricted battery setting enabled. Some phones also need their separate Autostart setting. GPS accuracy and device power management can delay an alert, especially at small radii or higher travel speeds. Do not force-stop the app while relying on an alarm.
 
-After the destination is selected and the alarm starts, monitoring the saved coordinates does **not** require internet. Online map tiles, stop searches, many place searches, and shortened Google Maps links do require internet. The app does not include an offline basemap. The active screen shows distance while the online map is hidden.
+After the destination is selected and the alarm starts, monitoring the saved coordinates does **not** require internet. Online map tiles, stop searches, many place searches, and shortened Google Maps links do require internet. The app does not include an offline basemap. The active screen shows straight-line distance while the online map is hidden. If map tiles fail to load, tap **Retry map** after reconnecting. The warning clears when the visible map tiles recover; alarms continue monitoring without them.
+
+The ringing screen and selection sheets can be scrolled. With a small screen or large text, scroll to reach **Stop this alert**, **Snooze**, the remaining choices, or **Save**.
 
 ## Troubleshooting
 

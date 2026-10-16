@@ -12,6 +12,7 @@ import '../../models/destination_alarm.dart';
 import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
+import '../../widgets/scrollable_sheet.dart';
 import '../../services/geofence_service.dart';
 import '../home/home_screen.dart';
 import '../map/map_view.dart';
@@ -35,7 +36,7 @@ Future<int?> _pickRepeatDays(BuildContext context, int currentDays) {
     builder:
         (sheetContext) => StatefulBuilder(
           builder:
-              (sheetContext, setSheetState) => SafeArea(
+              (sheetContext, setSheetState) => ScrollableSheet(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
                   child: Column(
@@ -283,7 +284,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     final unit = await showModalBottomSheet<String>(
       context: context,
       builder:
-          (context) => SafeArea(
+          (context) => ScrollableSheet(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -396,12 +397,15 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           const SizedBox(height: 12),
           Text(
             distance == null
-                ? 'Finding current distance…'
-                : '${formatDistance(distance)} away',
+                ? 'Finding straight-line distance…'
+                : '${formatDistance(distance)} away in a straight line',
             style: Theme.of(context).textTheme.titleMedium,
           ),
+          const Text(
+            'Distance is measured directly to the destination, not along roads or tracks.',
+          ),
           if (eta != null)
-            Text('Estimated travel time at current speed: ${_formatEta(eta)}'),
+            Text('Straight-line estimate at current speed: ${_formatEta(eta)}'),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
@@ -507,7 +511,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                 () => showModalBottomSheet<void>(
                   context: context,
                   builder:
-                      (context) => SafeArea(
+                      (context) => ScrollableSheet(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children:
@@ -1006,9 +1010,16 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
               ).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
           ),
-          const Center(child: Text('REMAINING')),
+          const Center(
+            child: Text('STRAIGHT-LINE DISTANCE', textAlign: TextAlign.center),
+          ),
           if (eta != null)
-            Center(child: Text('About ${_formatEta(eta)} at current speed')),
+            Center(
+              child: Text(
+                'Straight-line estimate: ${_formatEta(eta)} at current speed',
+                textAlign: TextAlign.center,
+              ),
+            ),
           Center(
             child: Text(
               alarmState.status == 'paused'
@@ -1041,7 +1052,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                 leading: const Icon(Icons.offline_bolt_outlined),
                 title: const Text('Offline monitoring'),
                 subtitle: Text(
-                  'GPS checks your distance to ${alarm.place.latitude.toStringAsFixed(5)}, '
+                  'GPS checks your straight-line distance to ${alarm.place.latitude.toStringAsFixed(5)}, '
                   '${alarm.place.longitude.toStringAsFixed(5)}. The alarm does not need map tiles.',
                 ),
               ),
@@ -1069,10 +1080,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen>
                   subtitle: Text(
                     alarmState.selected?.lastGpsFixAt == null
                         ? 'No GPS fix available'
-                        : '${_formatDateTime(
-                              context,
-                              alarmState.selected!.lastGpsFixAt!,
-                            )} · ${DateTime.now().difference(alarmState.selected!.lastGpsFixAt!).inSeconds.clamp(0, 999999)} s ago',
+                        : '${_formatDateTime(context, alarmState.selected!.lastGpsFixAt!)} · ${DateTime.now().difference(alarmState.selected!.lastGpsFixAt!).inSeconds.clamp(0, 999999)} s ago',
                   ),
                 ),
                 ListTile(
@@ -1346,195 +1354,211 @@ class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen>
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.primaryContainer,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(),
-              Icon(
-                Icons.notifications_active,
-                size: 96,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 28),
-              Text(
-                'ALARM',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                alarm.displayName,
-                style: Theme.of(context).textTheme.titleLarge,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(switch (currentAlert.triggerReason) {
-                'time' => 'The selected time has been reached.',
-                'both' =>
-                  'The selected time and distance have both been reached.',
-                _ => 'You have reached the selected distance.',
-              }, textAlign: TextAlign.center),
-              if (alarmState.error != null) ...[
-                const SizedBox(height: 12),
-                const Text(
-                  'Could not refresh alarm status. Retrying…',
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              if (waitingAlerts.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Next: ${waitingAlerts.first.alarm.displayName}'
-                  '${waitingAlerts.length > 1 ? ' (+${waitingAlerts.length - 1} more)' : ''}',
-                  textAlign: TextAlign.center,
-                ),
-              ],
-              const Spacer(),
-              FilledButton.icon(
-                onPressed:
-                    alarmState.busy
-                        ? null
-                        : () async {
-                          try {
-                            await ref
-                                .read(alarmProvider)
-                                .dismissCurrent(alarm.id);
-                            if (context.mounted) {
-                              final current = ref.read(alarmProvider);
-                              context.go(
-                                current.hasTriggered
-                                    ? '/triggered'
-                                    : current.active == null
-                                    ? '/'
-                                    : '/active',
-                              );
-                            }
-                          } catch (_) {}
-                        },
-                icon: const Icon(Icons.stop),
-                label: const Text('Stop this alert'),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed:
-                    alarmState.busy
-                        ? null
-                        : () => showModalBottomSheet<void>(
-                          context: context,
-                          builder:
-                              (sheetContext) => SafeArea(
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const ListTile(title: Text('Snooze for')),
-                                    ...[1, 2, 5].map(
-                                      (minutes) => ListTile(
-                                        title: Text(
-                                          '$minutes ${minutes == 1 ? 'minute' : 'minutes'}',
-                                        ),
-                                        onTap: () async {
-                                          Navigator.pop(sheetContext);
-                                          try {
-                                            await ref
-                                                .read(alarmProvider)
-                                                .snooze(minutes, alarm.id);
-                                            if (context.mounted) {
-                                              context.go(
-                                                ref
-                                                        .read(alarmProvider)
-                                                        .hasTriggered
-                                                    ? '/triggered'
-                                                    : '/active',
-                                              );
-                                            }
-                                          } catch (_) {
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(
-                                                context,
-                                              ).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text(
-                                                    'Could not snooze alarm.',
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+        child: LayoutBuilder(
+          builder:
+              (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(height: 28),
+                        Icon(
+                          Icons.notifications_active,
+                          size: 96,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
-                icon: const Icon(Icons.snooze),
-                label: const Text('Snooze'),
-              ),
-              const SizedBox(height: 12),
-              TextButton.icon(
-                onPressed:
-                    alarmState.busy
-                        ? null
-                        : () async {
-                          final confirmed = await showDialog<bool>(
-                            context: context,
-                            builder:
-                                (dialogContext) => AlertDialog(
-                                  title: Text(
-                                    alarm.repeatDays == 0
-                                        ? 'End trip?'
-                                        : 'Stop repeating alarm?',
-                                  ),
-                                  content: Text(
-                                    alarm.repeatDays == 0
-                                        ? 'This cancels both the time and distance alerts.'
-                                        : 'This cancels future repeats and the current alert.',
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed:
-                                          () => Navigator.pop(
-                                            dialogContext,
-                                            false,
+                        const SizedBox(height: 28),
+                        Text(
+                          'ALARM',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          alarm.displayName,
+                          style: Theme.of(context).textTheme.titleLarge,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(switch (currentAlert.triggerReason) {
+                          'time' => 'The selected time has been reached.',
+                          'both' =>
+                            'The selected time and distance have both been reached.',
+                          _ => 'You have reached the selected distance.',
+                        }, textAlign: TextAlign.center),
+                        if (alarmState.error != null) ...[
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Could not refresh alarm status. Retrying…',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                        if (waitingAlerts.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            'Next: ${waitingAlerts.first.alarm.displayName}'
+                            '${waitingAlerts.length > 1 ? ' (+${waitingAlerts.length - 1} more)' : ''}',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                        const SizedBox(height: 28),
+                        FilledButton.icon(
+                          onPressed:
+                              alarmState.busy
+                                  ? null
+                                  : () async {
+                                    try {
+                                      await ref
+                                          .read(alarmProvider)
+                                          .dismissCurrent(alarm.id);
+                                      if (context.mounted) {
+                                        final current = ref.read(alarmProvider);
+                                        context.go(
+                                          current.hasTriggered
+                                              ? '/triggered'
+                                              : current.active == null
+                                              ? '/'
+                                              : '/active',
+                                        );
+                                      }
+                                    } catch (_) {}
+                                  },
+                          icon: const Icon(Icons.stop),
+                          label: const Text('Stop this alert'),
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed:
+                              alarmState.busy
+                                  ? null
+                                  : () => showModalBottomSheet<void>(
+                                    context: context,
+                                    builder:
+                                        (sheetContext) => ScrollableSheet(
+                                          child: Column(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const ListTile(
+                                                title: Text('Snooze for'),
+                                              ),
+                                              ...[1, 2, 5].map(
+                                                (minutes) => ListTile(
+                                                  title: Text(
+                                                    '$minutes ${minutes == 1 ? 'minute' : 'minutes'}',
+                                                  ),
+                                                  onTap: () async {
+                                                    Navigator.pop(sheetContext);
+                                                    try {
+                                                      await ref
+                                                          .read(alarmProvider)
+                                                          .snooze(
+                                                            minutes,
+                                                            alarm.id,
+                                                          );
+                                                      if (context.mounted) {
+                                                        context.go(
+                                                          ref
+                                                                  .read(
+                                                                    alarmProvider,
+                                                                  )
+                                                                  .hasTriggered
+                                                              ? '/triggered'
+                                                              : '/active',
+                                                        );
+                                                      }
+                                                    } catch (_) {
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          const SnackBar(
+                                                            content: Text(
+                                                              'Could not snooze alarm.',
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                    }
+                                                  },
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                      child: const Text('Keep trip'),
-                                    ),
-                                    FilledButton(
-                                      onPressed:
-                                          () => Navigator.pop(
-                                            dialogContext,
-                                            true,
+                                        ),
+                                  ),
+                          icon: const Icon(Icons.snooze),
+                          label: const Text('Snooze'),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed:
+                              alarmState.busy
+                                  ? null
+                                  : () async {
+                                    final confirmed = await showDialog<bool>(
+                                      context: context,
+                                      builder:
+                                          (dialogContext) => AlertDialog(
+                                            title: Text(
+                                              alarm.repeatDays == 0
+                                                  ? 'End trip?'
+                                                  : 'Stop repeating alarm?',
+                                            ),
+                                            content: Text(
+                                              alarm.repeatDays == 0
+                                                  ? 'This cancels both the time and distance alerts.'
+                                                  : 'This cancels future repeats and the current alert.',
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed:
+                                                    () => Navigator.pop(
+                                                      dialogContext,
+                                                      false,
+                                                    ),
+                                                child: const Text('Keep trip'),
+                                              ),
+                                              FilledButton(
+                                                onPressed:
+                                                    () => Navigator.pop(
+                                                      dialogContext,
+                                                      true,
+                                                    ),
+                                                child: const Text('End trip'),
+                                              ),
+                                            ],
                                           ),
-                                      child: const Text('End trip'),
-                                    ),
-                                  ],
-                                ),
-                          );
-                          if (confirmed != true) return;
-                          try {
-                            await ref.read(alarmProvider).stop(alarm.id);
-                            if (context.mounted) {
-                              final current = ref.read(alarmProvider);
-                              context.go(
-                                current.hasTriggered
-                                    ? '/triggered'
-                                    : current.active == null
-                                    ? '/'
-                                    : '/active',
-                              );
-                            }
-                          } catch (_) {}
-                        },
-                icon: const Icon(Icons.cancel_outlined),
-                label: const Text('End trip'),
+                                    );
+                                    if (confirmed != true) return;
+                                    try {
+                                      await ref
+                                          .read(alarmProvider)
+                                          .stop(alarm.id);
+                                      if (context.mounted) {
+                                        final current = ref.read(alarmProvider);
+                                        context.go(
+                                          current.hasTriggered
+                                              ? '/triggered'
+                                              : current.active == null
+                                              ? '/'
+                                              : '/active',
+                                        );
+                                      }
+                                    } catch (_) {}
+                                  },
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('End trip'),
+                        ),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 20),
-            ],
-          ),
         ),
       ),
     );
