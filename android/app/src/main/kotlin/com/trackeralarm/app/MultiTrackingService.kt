@@ -31,6 +31,9 @@ class MultiTrackingService : Service() {
             if (MultiAlarmRuntime.playbackResumeRequired(context)) return mapOf(
                 "monitoringMessage" to "Phone restarted. Open the app to resume the pending alert.",
                 "monitoringHealthy" to false, "gpsStatus" to "Alert needs attention")
+            if (!AlarmScheduler.canScheduleExact(context)) return mapOf(
+                "monitoringMessage" to "Allow Alarms & reminders in app settings. Snooze and scheduled alerts may be delayed.",
+                "monitoringHealthy" to false, "gpsStatus" to "Check alarm permission")
             val distanceActive = MultiAlarmRuntime.live(context).any {
                 !it.distanceFired && it.distanceReady(System.currentTimeMillis())
             }

@@ -5,14 +5,11 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
-import android.media.AudioAttributes
-import android.media.RingtoneManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.location.Location
 import android.os.Build
-import android.os.SystemClock
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
@@ -22,7 +19,7 @@ object AlarmRuntime {
     const val TRACKING_ID = 101
     const val ALARM_ID = 102
     const val CHANNEL_TRACKING = "destination_tracking"
-    const val CHANNEL_ALARM = "destination_alarm"
+    const val CHANNEL_ALARM = "destination_alarm_controls_v2"
 
     fun prefs(context: Context): SharedPreferences = context.getSharedPreferences("destination_monitor", Context.MODE_PRIVATE)
 
@@ -71,8 +68,7 @@ object AlarmRuntime {
         if (stored.getBoolean("timeFired", false)) return
         val whenMillis = stored.getLong("alertAt", 0L)
         if (whenMillis <= System.currentTimeMillis()) return
-        val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, whenMillis, timeIntent(context))
+        AlarmScheduler.schedule(context, whenMillis, timeIntent(context), audible = true)
     }
 
     private fun cancelTime(context: Context) {
@@ -261,8 +257,7 @@ object AlarmRuntime {
         showTracking(context, if (monitoringStarted) {
             "Alarm snoozed for $minutes minute${if (minutes == 1) "" else "s"}"
         } else "GPS monitoring paused. Open the app to resume.")
-        val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        manager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + minutes * 60_000L, snoozeIntent(context))
+        AlarmScheduler.schedule(context, System.currentTimeMillis() + minutes * 60_000L, snoozeIntent(context), audible = true)
     }
 
     fun snoozeExpired(context: Context, done: () -> Unit) {
@@ -331,9 +326,10 @@ object AlarmRuntime {
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel(CHANNEL_TRACKING, "Destination tracking", NotificationManager.IMPORTANCE_LOW))
             val alarm = NotificationChannel(CHANNEL_ALARM, "Destination alarms", NotificationManager.IMPORTANCE_HIGH)
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            if (uri != null) alarm.setSound(uri, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).build())
-            alarm.enableVibration(true)
+            // A new channel ID is needed: Android keeps old channel sound settings.
+            // AlarmSoundPlayer alone owns the selected looping sound and vibration.
+            alarm.setSound(null, null)
+            alarm.enableVibration(false)
             manager.createNotificationChannel(alarm)
         }
         return manager
@@ -363,6 +359,7 @@ object AlarmRuntime {
         val reason = prefs(context).getString("triggerReason", "distance")
         val snooze = PendingIntent.getBroadcast(context, 24, Intent(context, AlarmActionReceiver::class.java).setAction("tracker_alarm.SNOOZE"), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return builder(context, CHANNEL_ALARM)
+            .setSound(null).setVibrate(null).setOnlyAlertOnce(true)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(when (reason) { "time" -> "Time alarm"; "both" -> "Time and distance alarm"; else -> "Destination nearby" })
             .setContentText(when (reason) { "time" -> "Time reached for $name"; "both" -> "Time reached and near $name"; else -> "You are near $name" })

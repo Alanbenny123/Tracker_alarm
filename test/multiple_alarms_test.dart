@@ -29,6 +29,7 @@ class FakeNative extends GeofenceService {
     preciseLocation: true,
     backgroundLocation: true,
     notifications: true,
+    exactAlarms: true,
     batteryOptimizationOff: true,
   );
   @override
@@ -353,6 +354,7 @@ void main() {
             preciseLocation: true,
             backgroundLocation: true,
             notifications: true,
+            exactAlarms: true,
             batteryOptimizationOff: false,
           );
     final location = NeverCalledLocation();

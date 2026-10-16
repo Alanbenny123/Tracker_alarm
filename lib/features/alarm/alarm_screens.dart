@@ -540,6 +540,28 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       onTap: _enableNotifications,
                     ),
                     _requirementTile(
+                      title: 'Alarms & reminders',
+                      subtitle: 'Allow reliable snooze and scheduled alarms',
+                      done: requirements!.exactAlarms,
+                      onTap: () async {
+                        try {
+                          await ref
+                              .read(geofenceProvider)
+                              .openExactAlarmSettings();
+                        } catch (_) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Open Android settings → Apps → Special app access → Alarms & reminders.',
+                              ),
+                            ),
+                          );
+                        }
+                        await _refreshRequirements();
+                      },
+                    ),
+                    _requirementTile(
                       title: 'Battery: Unrestricted',
                       subtitle:
                           requirements!.batteryManuallyConfirmed &&

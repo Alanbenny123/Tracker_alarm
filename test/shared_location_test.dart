@@ -1,8 +1,45 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tracker_alarm/services/shared_location_service.dart';
 
 void main() {
   final service = SharedLocationService();
+
+  test('a stalled short link times out and closes its connection', () async {
+    final client = _ShareClient();
+    final lookup = SharedLocationService(
+      clientFactory: () => client,
+      lookupTimeout: const Duration(milliseconds: 30),
+    );
+    expect(await lookup.parse('https://maps.app.goo.gl/stalled'), isNull);
+    expect(client.closed, isTrue);
+  });
+
+  test('cancel completes immediately and ignores a late redirect', () async {
+    final client = _ShareClient();
+    final lookup = SharedLocationService(clientFactory: () => client);
+    final pending = lookup.parse('https://maps.app.goo.gl/cancelled');
+    await client.started.future;
+    lookup.cancel();
+    expect(await pending.timeout(const Duration(seconds: 1)), isNull);
+    expect(client.closed, isTrue);
+    client.request.complete(_ShareRequest(_ShareResponse()));
+    await Future<void>.delayed(Duration.zero);
+    expect(lookup.resolvedQuery, isNull);
+    expect(await lookup.parse('9.93,76.26'), isNotNull);
+  });
+
+  test('redirect coordinates resolve without waiting for the body', () async {
+    final response = _ShareResponse();
+    final client = _ShareClient()..request.complete(_ShareRequest(response));
+    final lookup = SharedLocationService(clientFactory: () => client);
+    final place = await lookup.parse('https://maps.app.goo.gl/headers');
+    expect(place?.latitude, 9.93);
+    expect(response.bodyRead, isFalse);
+    expect(client.closed, isTrue);
+  });
 
   test('reads coordinates and name from a Google Maps place share', () async {
     final place = await service.parse(
@@ -61,4 +98,61 @@ void main() {
       expect(query, contains('Athani, Kochi'));
     },
   );
+}
+
+class _ShareClient implements HttpClient {
+  final request = Completer<HttpClientRequest>();
+  final started = Completer<void>();
+  bool closed = false;
+  @override
+  Duration? connectionTimeout;
+  @override
+  Future<HttpClientRequest> getUrl(Uri url) {
+    started.complete();
+    return request.future;
+  }
+
+  @override
+  void close({bool force = false}) => closed = force;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ShareRequest implements HttpClientRequest {
+  _ShareRequest(this.response);
+  final HttpClientResponse response;
+  @override
+  bool followRedirects = false;
+  @override
+  int maxRedirects = 0;
+  @override
+  Future<HttpClientResponse> close() async => response;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ShareResponse implements HttpClientResponse {
+  bool bodyRead = false;
+  @override
+  List<RedirectInfo> get redirects => [_ShareRedirect()];
+  @override
+  StreamSubscription<List<int>> listen(
+    void Function(List<int>)? onData, {
+    Function? onError,
+    void Function()? onDone,
+    bool? cancelOnError,
+  }) {
+    bodyRead = true;
+    return const Stream<List<int>>.empty().listen(onData);
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _ShareRedirect implements RedirectInfo {
+  @override
+  Uri get location => Uri.parse('https://www.google.com/maps?q=9.93,76.26');
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

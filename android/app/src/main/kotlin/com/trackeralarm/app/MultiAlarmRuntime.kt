@@ -22,6 +22,8 @@ object MultiAlarmRuntime {
     private const val MAX_ALARMS = 10
     private const val KEY = "alarms"
     private var scheduledAt = 0L
+    private var scheduledExact = false
+    private var scheduledAudible = false
     private var previousFix: Location? = null
 
     data class Entry(
@@ -200,6 +202,7 @@ object MultiAlarmRuntime {
     }
 
     @Synchronized fun realignClock(context: Context) {
+        scheduledAt = 0L // Clock changes and permission grants must replace the OS alarm.
         val entries = read(context)
         var changed = false
         for (entry in entries) {
@@ -544,12 +547,18 @@ object MultiAlarmRuntime {
                 if (entry.repeatDays != 0 && entry.status == "active" &&
                     entry.cycleDay > System.currentTimeMillis()) entry.cycleDay else 0L)
         }.filter { it > 0L }.minOrNull() ?: 0L
-        if (next == scheduledAt) return
+        val exact = AlarmScheduler.canScheduleExact(context)
+        val audible = entries.any { it.live() &&
+            ((!it.timeFired && it.alertAt == next && next > 0L) ||
+             (it.status == "snoozed" && it.snoozedUntil == next && next > 0L)) }
+        if (next == scheduledAt && exact == scheduledExact && audible == scheduledAudible) return
         val manager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = timeIntent(context)
         manager.cancel(intent)
-        if (next > 0L) manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, next, intent)
+        if (next > 0L) AlarmScheduler.schedule(context, next, intent, audible)
         scheduledAt = next
+        scheduledExact = exact
+        scheduledAudible = audible
     }
 
     fun refresh(context: Context, strict: Boolean = false) {
@@ -596,6 +605,7 @@ object MultiAlarmRuntime {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return builder(context, AlarmRuntime.CHANNEL_ALARM)
+            .setSound(null).setVibrate(null).setOnlyAlertOnce(true)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setContentTitle(when (entry.triggerReason) { "time" -> "Time alarm"; "both" -> "Time and distance alarm"; else -> "Destination nearby" })
             .setContentText(if (waiting == 0) entry.name else "${entry.name} · $waiting more alert${if (waiting == 1) "" else "s"} waiting")

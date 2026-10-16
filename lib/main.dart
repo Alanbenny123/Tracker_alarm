@@ -33,6 +33,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
   bool _handlingShare = false;
   bool _shareQueued = false;
   bool _resolvingSharedLocation = false;
+  bool _shareCancelled = false;
   late final GoRouter router = GoRouter(
     routes: [
       GoRoute(
@@ -108,6 +109,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
     try {
       final text = await _shareService.takePendingShare();
       if (text == null || text.isEmpty) return;
+      _shareCancelled = false;
       final loadingTimer = Stopwatch()..start();
       if (mounted) setState(() => _resolvingSharedLocation = true);
       final place = await _shareService.parse(text);
@@ -115,7 +117,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       if (loadingTimer.elapsed < minimumVisibleTime) {
         await Future<void>.delayed(minimumVisibleTime - loadingTimer.elapsed);
       }
-      if (!mounted) return;
+      if (!mounted || _shareCancelled) return;
       if (place == null) {
         final query =
             _shareService.searchQuery(text) ?? _shareService.resolvedQuery;
@@ -146,15 +148,22 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       if (mounted && _resolvingSharedLocation) {
         setState(() => _resolvingSharedLocation = false);
       }
-      if (_shareQueued) {
+      if (_shareQueued && mounted) {
         _shareQueued = false;
         unawaited(_takeSharedLocation());
       }
     }
   }
 
+  void _cancelSharedLocation() {
+    _shareCancelled = true;
+    _shareService.cancel();
+    setState(() => _resolvingSharedLocation = false);
+  }
+
   @override
   void dispose() {
+    _shareService.cancel();
     WidgetsBinding.instance.removeObserver(this);
     SharedLocationService.channel.setMethodCallHandler(null);
     router.dispose();
@@ -198,21 +207,26 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
                       padding: const EdgeInsets.all(24),
                       child: Semantics(
                         liveRegion: true,
-                        child: const Column(
+                        child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            CircularProgressIndicator(
+                            const CircularProgressIndicator(
                               semanticsLabel: 'Opening shared location',
                             ),
-                            SizedBox(height: 20),
-                            Text(
+                            const SizedBox(height: 20),
+                            const Text(
                               'Opening Google Maps location…',
                               textAlign: TextAlign.center,
                             ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Resolving the shared link. This may take a few seconds.',
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Resolving the shared link. This can take up to 12 seconds.',
                               textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: _cancelSharedLocation,
+                              child: const Text('Cancel'),
                             ),
                           ],
                         ),

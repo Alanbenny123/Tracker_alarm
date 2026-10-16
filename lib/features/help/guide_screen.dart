@@ -40,7 +40,7 @@ class GuideScreen extends StatelessWidget {
           number: '4',
           title: 'Complete phone settings',
           detail:
-              'Allow precise location all the time, notifications, and unrestricted battery use when the setup screen asks.',
+              'Allow precise location all the time, notifications, Alarms & reminders, and unrestricted battery use when the setup screen asks.',
         ),
         const _GuideStep(
           number: '5',
@@ -70,7 +70,7 @@ class GuideScreen extends StatelessWidget {
           icon: Icons.share_location_outlined,
           title: 'Sharing from Google Maps',
           points: [
-            'In Google Maps, open a place, tap Share, and choose Destination Alarm. Wait while the shared link is read, then check the place on the setup screen.',
+            'In Google Maps, open a place, tap Share, and choose Destination Alarm. Wait while the shared link is read (up to 12 seconds), or tap Cancel. Then check the place on the setup screen.',
             'If a shared link does not contain coordinates, the app may open a place search so you can select the right result. Short Google Maps links need internet to resolve.',
             'Google Maps offline downloads cannot be imported into this app.',
           ],
@@ -88,9 +88,9 @@ class GuideScreen extends StatelessWidget {
           icon: Icons.lock_outline,
           title: 'Working while the phone is locked',
           points: [
-            'The setup screen checks precise location, Location: Allow all the time, notifications, and Unrestricted or No restrictions battery use. Complete these settings before starting an alarm.',
+            'The setup screen checks precise location, Location: Allow all the time, notifications, Alarms & reminders, and Unrestricted or No restrictions battery use. Complete these settings before starting an alarm.',
             'Keep phone location services on. If your phone has an Autostart control, allow this app there too. Some phones may still delay background GPS; choose a larger distance when travelling quickly.',
-            'When the alarm rings, open its notification or the app to snooze or stop it. Force-stopping the app stops background monitoring.',
+            'When the alarm rings, open its notification or the app to snooze or stop it. Alarms & reminders access lets short snoozes ring while the phone is idle. Force-stopping the app stops background monitoring.',
           ],
         ),
         const _GuideSection(
@@ -108,7 +108,7 @@ class GuideScreen extends StatelessWidget {
           points: [
             'If a stop or place search fails, tap Retry search beside the error. Check your connection, then try another area or a point on the map if needed. Public stop data and server availability vary.',
             'If Near me waits for GPS, turn on location services or search an area instead. The GPS status on the active screen shows when reception is weak.',
-            'If the phone stays silent while locked, recheck background location, notifications, and unrestricted battery use. A small alert radius or poor GPS reception can delay an alarm.',
+            'If the phone stays silent while locked, recheck background location, notifications, Alarms & reminders, and unrestricted battery use. A small alert radius or poor GPS reception can delay an alarm.',
           ],
         ),
         const _GuideSection(

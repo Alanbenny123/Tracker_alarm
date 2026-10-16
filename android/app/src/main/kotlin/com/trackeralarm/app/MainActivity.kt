@@ -141,9 +141,21 @@ class MainActivity : FlutterActivity() {
                         "preciseLocation" to precise,
                         "backgroundLocation" to background,
                         "notifications" to notifications,
+                        "exactAlarms" to AlarmScheduler.canScheduleExact(this),
                         "batteryOptimizationOff" to battery,
                         "batteryManuallyConfirmed" to getSharedPreferences("alarm_requirement_setup", MODE_PRIVATE).getBoolean("battery_confirmed", false),
                     ))
+                }
+                "openExactAlarmSettings" -> {
+                    try {
+                        if (Build.VERSION.SDK_INT >= 31) {
+                            startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                Uri.parse("package:$packageName")))
+                        }
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("settings", "Could not open Alarms & reminders settings: ${e.message}", null)
+                    }
                 }
                 "confirmBatterySettings" -> {
                     getSharedPreferences("alarm_requirement_setup", MODE_PRIVATE).edit().putBoolean("battery_confirmed", true).apply()

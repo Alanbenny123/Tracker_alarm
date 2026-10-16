@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
@@ -5,6 +6,24 @@ import 'package:flutter/services.dart';
 import '../models/place.dart';
 
 class SharedLocationService {
+  SharedLocationService({
+    HttpClient Function()? clientFactory,
+    this.lookupTimeout = const Duration(seconds: 12),
+  }) : _clientFactory = clientFactory ?? HttpClient.new;
+
+  final HttpClient Function() _clientFactory;
+  final Duration lookupTimeout;
+  _ShareLookup? _lookup;
+
+  /// Ends the lookup immediately, including a stalled connection or response.
+  void cancel() {
+    final lookup = _lookup;
+    if (lookup == null) return;
+    if (!lookup.cancelled.isCompleted) lookup.cancelled.complete((null, null));
+    lookup.client.close(force: true);
+    _lookup = null;
+  }
+
   static const channel = MethodChannel('tracker_alarm/share');
   String? resolvedQuery;
 
@@ -23,6 +42,7 @@ class SharedLocationService {
   }
 
   Future<Place?> parse(String text) async {
+    cancel();
     resolvedQuery = null;
     final direct = _placeFromText(text);
     if (direct != null) return direct;
@@ -32,29 +52,39 @@ class SharedLocationService {
     final uri = Uri.tryParse(link);
     if (uri == null || !_isGoogleShortLink(uri)) return null;
 
-    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    final lookup = _ShareLookup(_clientFactory());
+    _lookup = lookup;
+    lookup.client.connectionTimeout = lookupTimeout;
     try {
-      final request = await client
-          .getUrl(uri)
-          .timeout(const Duration(seconds: 8));
+      final result = await Future.any([
+        _resolve(lookup.client, uri),
+        lookup.cancelled.future,
+      ]).timeout(lookupTimeout, onTimeout: () => (null, null));
+      if (!identical(_lookup, lookup)) return null;
+      resolvedQuery = result.$2;
+      return result.$1;
+    } finally {
+      lookup.client.close(force: true);
+      if (identical(_lookup, lookup)) _lookup = null;
+    }
+  }
+
+  Future<(Place?, String?)> _resolve(HttpClient client, Uri uri) async {
+    try {
+      final request = await client.getUrl(uri);
       request.followRedirects = true;
       request.maxRedirects = 5;
-      final response = await request.close().timeout(
-        const Duration(seconds: 8),
-      );
+      final response = await request.close();
       var resolved = uri;
       for (final redirect in response.redirects) {
         resolved = resolved.resolveUri(redirect.location);
       }
-      await response.drain<void>();
-      if (!_isGoogleMapsLink(resolved)) return null;
+      // Only redirect headers are needed. Do not wait for a Maps HTML body.
+      if (!_isGoogleMapsLink(resolved)) return (null, null);
       final place = _placeFromText(resolved.toString());
-      if (place == null) resolvedQuery = queryFromMapsUrl(resolved);
-      return place;
+      return (place, place == null ? queryFromMapsUrl(resolved) : null);
     } on Exception {
-      return null;
-    } finally {
-      client.close(force: true);
+      return (null, null);
     }
   }
 
@@ -126,4 +156,11 @@ class SharedLocationService {
     }
     return (lat, lng);
   }
+}
+
+class _ShareLookup {
+  _ShareLookup(this.client);
+
+  final HttpClient client;
+  final cancelled = Completer<(Place?, String?)>();
 }

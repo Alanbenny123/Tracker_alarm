@@ -9,18 +9,24 @@ class AlarmRequirements {
     required this.notifications,
     required this.batteryOptimizationOff,
     this.batteryManuallyConfirmed = false,
+    this.exactAlarms = false,
   });
 
   final bool preciseLocation;
   final bool backgroundLocation;
   final bool notifications;
+  final bool exactAlarms;
   final bool batteryOptimizationOff;
   final bool batteryManuallyConfirmed;
 
   bool get batteryReady => batteryOptimizationOff || batteryManuallyConfirmed;
 
   bool get ready =>
-      preciseLocation && backgroundLocation && notifications && batteryReady;
+      preciseLocation &&
+      backgroundLocation &&
+      notifications &&
+      exactAlarms &&
+      batteryReady;
 
   String get missingMessage {
     if (!preciseLocation) return 'Allow precise location to start an alarm.';
@@ -28,6 +34,9 @@ class AlarmRequirements {
       return 'Set location to Allow all the time in Android settings.';
     }
     if (!notifications) return 'Allow notifications to start an alarm.';
+    if (!exactAlarms) {
+      return 'Allow Alarms & reminders for reliable snooze and repeat alarms.';
+    }
     if (!batteryReady) {
       return 'Set battery use to Unrestricted or No restrictions before starting.';
     }
@@ -39,6 +48,7 @@ class AlarmRequirements {
         preciseLocation: value['preciseLocation'] == true,
         backgroundLocation: value['backgroundLocation'] == true,
         notifications: value['notifications'] == true,
+        exactAlarms: value['exactAlarms'] == true,
         batteryOptimizationOff: value['batteryOptimizationOff'] == true,
         batteryManuallyConfirmed: value['batteryManuallyConfirmed'] == true,
       );
@@ -124,6 +134,9 @@ class GeofenceService {
     if (value == null) throw StateError('Could not check alarm requirements.');
     return AlarmRequirements.fromMap(value);
   }
+
+  Future<void> openExactAlarmSettings() =>
+      _channel.invokeMethod<void>('openExactAlarmSettings');
 
   Future<void> openBatterySettings() =>
       _channel.invokeMethod<void>('openBatterySettings');

@@ -1,7 +1,13 @@
 package com.trackeralarm.app
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.Application
+import android.app.Notification
+import android.media.MediaPlayer
+import android.os.VibratorManager
+import org.robolectric.shadows.ShadowAlarmManager
+import org.robolectric.shadows.ShadowMediaPlayer
 import android.content.Context
 import android.content.Intent
 import android.location.Location
@@ -28,6 +34,7 @@ class AlarmRuntimeTest {
     private var base = 0L
 
     @Before fun reset() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
         app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE).edit().clear().commit()
         MultiAlarmRuntime.refresh(app)
         base = System.currentTimeMillis() - 10_000
@@ -97,6 +104,64 @@ class AlarmRuntimeTest {
         val controller = Robolectric.buildService(MultiTrackingService::class.java).create().startCommand(0, 1)
         assertEquals(MultiAlarmRuntime.TRACKING_ID, shadowOf(controller.get()).lastForegroundNotificationId)
         controller.destroy()
+    }
+
+    @Test fun shortSnoozeUsesExactAlarmClockAndExpiresIntoRinging() {
+        save(entry("snooze").apply { status = "triggered"; distanceFired = true })
+        MultiAlarmRuntime.snooze(app, "snooze", 1)
+        val manager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val stored = MultiAlarmRuntime.live(app).single()
+        val scheduled = shadowOf(manager).scheduledAlarms.single()
+        assertEquals(stored.snoozedUntil, scheduled.triggerAtMs)
+        assertEquals(0L, scheduled.windowLengthMs)
+        assertNotNull(scheduled.alarmClockInfo)
+        assertEquals(stored.snoozedUntil, manager.nextAlarmClock.triggerTime)
+        // Deliver the real receiver after the persisted snooze deadline.
+        save(stored.apply { snoozedUntil = System.currentTimeMillis() - 1 })
+        MultiAlarmReceiver().onReceive(app, shadowOf(scheduled.operation).savedIntent)
+        assertEquals("triggered", MultiAlarmRuntime.ringing(app)?.status)
+    }
+
+    @Test fun grantingExactAccessReplacesRestoredInexactSchedule() {
+        ShadowAlarmManager.setCanScheduleExactAlarms(false)
+        save(entry("waiting").apply { alertAt = System.currentTimeMillis() + 60_000 })
+        MultiAlarmRuntime.refresh(app)
+        val manager = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        assertTrue(shadowOf(manager).scheduledAlarms.single().windowLengthMs != 0L)
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        AlarmRestoreReceiver().onReceive(app,
+            Intent(AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED))
+        val scheduled = shadowOf(manager).scheduledAlarms.single()
+        assertEquals(0L, scheduled.windowLengthMs)
+        assertNotNull(scheduled.alarmClockInfo)
+    }
+
+    @Test fun alarmNotificationNeverAddsASecondSoundOrVibration() {
+        val notification = MultiAlarmRuntime.alarmNotification(app, entry("quiet"))
+        val channel = AlarmRuntime.notifications(app).getNotificationChannel(AlarmRuntime.CHANNEL_ALARM)
+        assertNull(channel.sound)
+        assertFalse(channel.shouldVibrate())
+        assertNull(notification.sound)
+        assertNull(notification.vibrate)
+        assertTrue(notification.flags and Notification.FLAG_ONLY_ALERT_ONCE != 0)
+    }
+
+    @Test fun playbackFollowsVibrationChoiceAndCleansUpBeforeNextAlarm() {
+        ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(1000, 0) }
+        val players = mutableListOf<MediaPlayer>()
+        ShadowMediaPlayer.setCreateListener { player, _ -> players.add(player) }
+        val vibrator = (app.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        val sound = AlarmSoundPlayer(app)
+        sound.start("Bell", false)
+        assertTrue(players.last().isPlaying)
+        assertTrue(players.last().isLooping)
+        assertFalse(shadowOf(vibrator).isVibrating)
+        sound.stop()
+        sound.start("Digital", true)
+        assertTrue(players.last().isPlaying)
+        assertTrue(shadowOf(vibrator).isVibrating)
+        sound.stop()
+        assertFalse(shadowOf(vibrator).isVibrating)
     }
 
     @Test fun lockScreenActivityHasNoAppNavigationAndRejectsMissingAlarm() {
