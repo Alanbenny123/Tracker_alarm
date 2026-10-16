@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.os.Build
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -51,6 +52,8 @@ class AlarmSoundPlayer(private val context: Context) {
     private fun createPlayer(resId: Int): MediaPlayer {
         val player = MediaPlayer()
         try {
+            // Keep looping alarm audio playing when the display is off.
+            player.setWakeMode(context.applicationContext, PowerManager.PARTIAL_WAKE_LOCK)
             player.setAudioAttributes(AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_ALARM)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())

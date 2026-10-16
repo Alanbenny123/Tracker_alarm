@@ -534,6 +534,9 @@ object MultiAlarmRuntime {
             AlarmRuntime.notifications(context).cancel(TRACKING_ID)
             AlarmRuntime.notifications(context).cancel(ALARM_ID)
         } else {
+            // Dispatch to the existing foreground service immediately. A geofence
+            // or notification action must not wait for the next GPS fix or UI resume.
+            if (MultiTrackingService.refreshIfRunning()) return
             try {
                 if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(service)
                 else context.startService(service)
