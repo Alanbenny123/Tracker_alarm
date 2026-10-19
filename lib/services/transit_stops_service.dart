@@ -28,7 +28,12 @@ class TransitStopsService {
     lookup.client.close(force: true);
   }
 
-  static const _endpoint = 'https://overpass-api.de/api/interpreter';
+  // Public instances are best effort. Try the second only when the first
+  // cannot complete; never send the same search to both at once.
+  static const _endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter',
+  ];
 
   Future<List<Place>> nearby(
     TravelMode mode,
@@ -76,7 +81,7 @@ class TransitStopsService {
       if (!identical(_lookup, lookup)) return [];
       if (cached != null && cached.$2.isNotEmpty) return _useSaved(cached);
       throw const TransitStopsException(
-        'Stop search timed out. Retry in a moment.',
+        'Stop search servers timed out. Retry later or choose Other to pick a point.',
       );
     } on TransitStopsException {
       if (!identical(_lookup, lookup)) return [];
@@ -120,95 +125,113 @@ class TransitStopsService {
     final namedFilter = filter.replaceAll('(around:', '["name"](around:');
     final query = '[out:json][timeout:15];($namedFilter);out center 200;';
     try {
-      for (var attempt = 0; attempt < 2; attempt++) {
+      for (var attempt = 0; attempt < _endpoints.length; attempt++) {
         if (lookup.cancelled.isCompleted) return [];
-        final request = await lookup.client
-            .postUrl(Uri.parse(_endpoint))
-            .timeout(const Duration(seconds: 12));
-        request.headers.contentType = ContentType(
-          'application',
-          'x-www-form-urlencoded',
-          charset: 'utf-8',
-        );
-        request.headers.set(HttpHeaders.acceptHeader, 'application/json');
-        request.headers.set(
-          HttpHeaders.userAgentHeader,
-          'DestinationAlarm/1.0 (Android; OSM transit stop lookup)',
-        );
-        request.write('data=${Uri.encodeQueryComponent(query)}');
-        final response = await request.close().timeout(
-          const Duration(seconds: 22),
-        );
-        if (response.statusCode != HttpStatus.ok) {
-          final status = response.statusCode;
-          if (status == HttpStatus.tooManyRequests ||
-              status == HttpStatus.notAcceptable) {
-            final retry = response.headers.value(HttpHeaders.retryAfterHeader);
-            final seconds = int.tryParse(retry ?? '');
-            DateTime? deadline;
-            if (seconds != null && seconds >= 0) {
-              deadline = _cache.now().add(Duration(seconds: seconds));
-            }
-            if (deadline == null && retry != null) {
-              try {
-                deadline = HttpDate.parse(retry);
-              } on FormatException {
-                /* Use the minimum cooldown. */
-              }
-            }
-            final minimum = _cache.now().add(const Duration(seconds: 30));
-            _cache.retryAt =
-                deadline != null && deadline.isAfter(minimum)
-                    ? deadline
-                    : minimum;
-          }
-          await response.drain<void>().timeout(const Duration(seconds: 3));
-          if ((status == HttpStatus.tooManyRequests ||
-                  status == HttpStatus.notAcceptable) &&
-              _cache.retryAt != null) {
-            final seconds =
-                _cache.retryAt!.difference(_cache.now()).inSeconds + 1;
-            throw TransitStopsException(
-              'Stop search is busy. Retry in $seconds seconds.',
-            );
-          }
-          if (attempt == 0 &&
-              (status == HttpStatus.badGateway ||
-                  status == HttpStatus.serviceUnavailable ||
-                  status == HttpStatus.gatewayTimeout)) {
-            await Future<void>.delayed(const Duration(seconds: 2));
-            continue;
-          }
-          throw TransitStopsException(_statusMessage(status));
-        }
-        final bytes = <int>[];
-        await for (final chunk in response.timeout(
-          const Duration(seconds: 22),
-        )) {
-          bytes.addAll(chunk);
-          if (bytes.length > 2 * 1024 * 1024) {
-            throw const TransitStopsException(
-              'Too many stops returned. Search a smaller area.',
-            );
-          }
-        }
-        final body = jsonDecode(utf8.decode(bytes));
-        if (body is! Map ||
-            body['elements'] is! List ||
-            body['remark'] != null) {
-          throw const TransitStopsException(
-            'Stop search returned incomplete results. Retry later.',
+        final client = attempt == 0 ? lookup.client : _clientFactory();
+        lookup.client = client;
+        client.connectionTimeout = const Duration(seconds: 12);
+        try {
+          final request = await client
+              .postUrl(Uri.parse(_endpoints[attempt]))
+              .timeout(const Duration(seconds: 12));
+          request.headers.contentType = ContentType(
+            'application',
+            'x-www-form-urlencoded',
+            charset: 'utf-8',
           );
+          request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+          request.headers.set(
+            HttpHeaders.userAgentHeader,
+            'DestinationAlarm/1.0 (Android; OSM transit stop lookup)',
+          );
+          request.write('data=${Uri.encodeQueryComponent(query)}');
+          final response = await request.close().timeout(
+            const Duration(seconds: 22),
+          );
+          if (response.statusCode != HttpStatus.ok) {
+            final status = response.statusCode;
+            if (status == HttpStatus.tooManyRequests ||
+                status == HttpStatus.notAcceptable) {
+              final retry = response.headers.value(
+                HttpHeaders.retryAfterHeader,
+              );
+              final seconds = int.tryParse(retry ?? '');
+              DateTime? deadline;
+              if (seconds != null && seconds >= 0) {
+                deadline = _cache.now().add(Duration(seconds: seconds));
+              }
+              if (deadline == null && retry != null) {
+                try {
+                  deadline = HttpDate.parse(retry);
+                } on FormatException {
+                  /* Use the minimum cooldown. */
+                }
+              }
+              final minimum = _cache.now().add(const Duration(seconds: 30));
+              _cache.retryAt =
+                  deadline != null && deadline.isAfter(minimum)
+                      ? deadline
+                      : minimum;
+            }
+            await response.drain<void>().timeout(const Duration(seconds: 3));
+            if ((status == HttpStatus.tooManyRequests ||
+                    status == HttpStatus.notAcceptable) &&
+                _cache.retryAt != null) {
+              final seconds =
+                  _cache.retryAt!.difference(_cache.now()).inSeconds + 1;
+              throw TransitStopsException(
+                'Stop search is busy. Retry in $seconds seconds.',
+              );
+            }
+            if (status >= 500 && status <= 599) {
+              throw _RetryableTransitStopsException(_statusMessage(status));
+            }
+            throw TransitStopsException(_statusMessage(status));
+          }
+          final bytes = <int>[];
+          await for (final chunk in response.timeout(
+            const Duration(seconds: 22),
+          )) {
+            bytes.addAll(chunk);
+            if (bytes.length > 2 * 1024 * 1024) {
+              throw const TransitStopsException(
+                'Too many stops returned. Search a smaller area.',
+              );
+            }
+          }
+          final body = jsonDecode(utf8.decode(bytes));
+          if (body is! Map ||
+              body['elements'] is! List ||
+              body['remark'] != null) {
+            throw const _RetryableTransitStopsException(
+              'Stop search returned incomplete results. Retry later.',
+            );
+          }
+          final places = parseTransitStops(body, mode);
+          places.sort(
+            (a, b) => _roughDistanceMetresTo(
+              latitude,
+              longitude,
+              a,
+            ).compareTo(_roughDistanceMetresTo(latitude, longitude, b)),
+          );
+          return places;
+        } on TimeoutException {
+          if (attempt == _endpoints.length - 1) rethrow;
+        } on SocketException {
+          if (attempt == _endpoints.length - 1) rethrow;
+        } on HandshakeException {
+          if (attempt == _endpoints.length - 1) rethrow;
+        } on HttpException {
+          if (attempt == _endpoints.length - 1) rethrow;
+        } on FormatException {
+          if (attempt == _endpoints.length - 1) rethrow;
+        } on _RetryableTransitStopsException {
+          if (attempt == _endpoints.length - 1) rethrow;
+          await Future<void>.delayed(const Duration(seconds: 2));
+        } finally {
+          client.close(force: true);
         }
-        final places = parseTransitStops(body, mode);
-        places.sort(
-          (a, b) => _roughDistanceMetresTo(
-            latitude,
-            longitude,
-            a,
-          ).compareTo(_roughDistanceMetresTo(latitude, longitude, b)),
-        );
-        return places;
       }
       throw const TransitStopsException(
         'Stop search is unavailable. Retry in a moment.',
@@ -217,11 +240,11 @@ class TransitStopsService {
       rethrow;
     } on TimeoutException {
       throw const TransitStopsException(
-        'Stop search timed out. Retry in a moment.',
+        'Stop search servers timed out. Retry later or choose Other to pick a point.',
       );
     } on SocketException {
       throw const TransitStopsException(
-        'Connect to the internet to find stops.',
+        'Could not reach stop search servers. Check internet or retry later.',
       );
     } on HandshakeException {
       throw const TransitStopsException('Could not connect to stop search.');
@@ -271,8 +294,12 @@ class TransitStopsCache {
 
 class _StopLookup {
   _StopLookup(this.client);
-  final HttpClient client;
+  HttpClient client;
   final cancelled = Completer<List<Place>>();
+}
+
+class _RetryableTransitStopsException extends TransitStopsException {
+  const _RetryableTransitStopsException(super.message);
 }
 
 String _statusMessage(int status) => switch (status) {
@@ -281,6 +308,8 @@ String _statusMessage(int status) => switch (status) {
   HttpStatus.badGateway ||
   HttpStatus.serviceUnavailable ||
   HttpStatus.gatewayTimeout => 'Stop search server is busy. Retry in a moment.',
+  HttpStatus.internalServerError =>
+    'Stop search server is unavailable. Retry in a moment.',
   HttpStatus.notAcceptable =>
     'Stop search asked us to wait. Retry after 30 seconds.',
   HttpStatus.badRequest =>

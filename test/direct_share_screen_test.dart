@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:tracker_alarm/main.dart';
@@ -14,6 +13,7 @@ import 'package:tracker_alarm/services/shared_location_service.dart';
 
 import 'helpers/alarm_fakes.dart';
 import 'helpers/raw_memory_storage.dart';
+import 'support/fake_maplibre.dart';
 
 class _Native extends FakeNative {
   @override
@@ -124,13 +124,9 @@ void main() {
         final map = tester.widget<MapView>(find.byType(MapView));
         expect(map.destination?.latitude, shared.latitude);
         expect(map.destination?.longitude, shared.longitude);
-        final camera =
-            tester
-                .widget<FlutterMap>(find.byType(FlutterMap))
-                .mapController!
-                .camera;
-        expect(camera.center.latitude, shared.latitude);
-        expect(camera.center.longitude, shared.longitude);
+        final camera = FakeMapLibrePlatform.shared.states.last.camera!;
+        expect(camera.center.lat, shared.latitude);
+        expect(camera.center.lon, shared.longitude);
         expect(find.text('Confirm destination'), findsOneWidget);
         expect(
           find.textContaining('This link has no exact coordinates'),

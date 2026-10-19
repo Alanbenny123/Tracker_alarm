@@ -132,7 +132,7 @@ class GuideScreen extends StatelessWidget {
             'If a stop or place search fails, tap Retry search beside the error. Check your connection, then try another area or a point on the map if needed. Public stop data and server availability vary.',
             'Busy-server responses apply a cooldown before retrying. Recently loaded stops are reused across visits; if refreshing fails, older cached stops may be shown with their age. Cached stops expire after 24 hours and disappear when the app process ends. This does not download map tiles.',
             'If no places match, check spelling or search a nearby town or landmark. Enter at least three characters. An empty stop list means no mapped, named stops were found in that search radius.',
-            'If map tiles fail, reconnect and tap Retry map. The warning clears when visible tiles load successfully. GPS monitoring continues without the map.',
+            'If the OpenFreeMap vector map does not load, the app automatically tries a dark backup map. If both sources fail, reconnect and tap Retry map. GPS monitoring continues without the map.',
             'On small screens or with large text, scroll the ringing screen and selection sheets to reach the remaining actions and choices.',
             'If Near me waits for GPS, turn on location services or search an area instead. The GPS status on the active screen shows when reception is weak.',
             'If the phone stays silent while locked, recheck background location, notifications, Alarms & reminders, lock-screen alarms, and unrestricted battery use. A small alert radius or poor GPS reception can delay an alarm.',

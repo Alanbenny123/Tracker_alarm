@@ -13,6 +13,7 @@ import 'package:tracker_alarm/services/places_service.dart';
 import 'package:tracker_alarm/services/transit_stops_service.dart';
 
 import 'helpers/alarm_fakes.dart';
+import 'support/fake_maplibre.dart';
 
 class _Places extends PlacesService {
   final requests = <Completer<List<Place>>>[];
@@ -43,6 +44,46 @@ class _Stops extends TransitStopsService {
 }
 
 void main() {
+  testWidgets('map warning stays visible above destination search', (
+    tester,
+  ) async {
+    final native = FakeMapLibrePlatform.shared;
+    native.reset();
+    native.autoIdle = false;
+    addTearDown(native.reset);
+    await tester.pumpWidget(_app(_Places(), _Stops()));
+    await tester.pump();
+    expect(native.states, hasLength(1));
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    final loadingText = find.textContaining('Trying backup map');
+    expect(loadingText, findsOneWidget);
+    expect(
+      tester.getBottomLeft(loadingText).dy,
+      lessThan(tester.getTopLeft(find.byType(TextField)).dy),
+    );
+    expect(native.states, hasLength(1));
+
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(
+      find.textContaining('Both map sources could not load'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Retry map'));
+    await tester.pump();
+    expect(
+      native.states.single.styles.last,
+      'https://tiles.openfreemap.org/styles/liberty',
+    );
+    native.states.single.emitIdle();
+    await tester.pump();
+    expect(find.text('Retry map'), findsNothing);
+    expect(native.states, hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'shared-place search hides the reported unrelated Canada result',
     (tester) async {

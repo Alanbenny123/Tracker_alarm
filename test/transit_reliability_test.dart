@@ -65,13 +65,17 @@ class _Client implements HttpClient {
   _Client(this.responses);
   final List<_Response> responses;
   final queries = <String>[];
+  final urls = <Uri>[];
   int requests = 0;
   bool closed = false;
   @override
   Duration? connectionTimeout;
   @override
-  Future<HttpClientRequest> postUrl(Uri url) async =>
-      _Request(responses[requests++], queries.add);
+  Future<HttpClientRequest> postUrl(Uri url) async {
+    urls.add(url);
+    return _Request(responses[requests++], queries.add);
+  }
+
   @override
   void close({bool force = false}) => closed = true;
   @override
@@ -83,6 +87,15 @@ class _OfflineClient extends _Client {
   @override
   Future<HttpClientRequest> postUrl(Uri url) =>
       Future.error(const SocketException('Offline'));
+}
+
+class _TimeoutClient extends _Client {
+  _TimeoutClient() : super([]);
+  @override
+  Future<HttpClientRequest> postUrl(Uri url) {
+    urls.add(url);
+    return Future.error(TimeoutException('Connection timed out'));
+  }
 }
 
 void main() {
@@ -224,24 +237,33 @@ void main() {
   );
 
   test(
-    'transient server failure retries once, and cancellation stops a pending retry',
+    'transient failure tries a different server and cancellation stops retry',
     () async {
-      final client = _Client([_Response(503), _Response(200)]);
+      final first = _Client([_Response(503)]);
+      final second = _Client([_Response(200)]);
+      var created = 0;
       final service = TransitStopsService(
         cache: TransitStopsCache(),
-        clientFactory: () => client,
+        clientFactory: () => created++ == 0 ? first : second,
       );
       final result = service.nearby(TravelMode.bus, 10, 76);
       await Future<void>.delayed(const Duration(milliseconds: 10));
-      expect(client.requests, 1);
+      expect(first.requests, 1);
       await Future<void>.delayed(const Duration(milliseconds: 2100));
       expect((await result).single.name, 'Town stop');
-      expect(client.requests, 2);
+      expect(first.urls.single.host, 'overpass-api.de');
+      expect(second.urls.single.host, 'overpass.private.coffee');
+      expect(second.requests, 1);
+      expect(first.closed, isTrue);
       service.dispose();
       final cancelled = _Client([_Response(503)]);
+      var cancelledClients = 0;
       final other = TransitStopsService(
         cache: TransitStopsCache(),
-        clientFactory: () => cancelled,
+        clientFactory: () {
+          cancelledClients++;
+          return cancelled;
+        },
       );
       final pending = other.nearby(TravelMode.metro, 10, 76);
       await Future<void>.delayed(const Duration(milliseconds: 10));
@@ -249,8 +271,45 @@ void main() {
       expect(await pending, isEmpty);
       await Future<void>.delayed(const Duration(milliseconds: 2100));
       expect(cancelled.requests, 1);
+      expect(cancelledClients, 1);
       expect(cancelled.closed, isTrue);
       other.dispose();
     },
   );
+
+  test('connection timeout falls back to another server', () async {
+    final first = _TimeoutClient();
+    final second = _Client([_Response(200)]);
+    var created = 0;
+    final service = TransitStopsService(
+      cache: TransitStopsCache(),
+      clientFactory: () => created++ == 0 ? first : second,
+    );
+    expect(
+      (await service.nearby(TravelMode.bus, 10, 76)).single.name,
+      'Town stop',
+    );
+    expect(first.closed, isTrue);
+    expect(second.urls.single.host, 'overpass.private.coffee');
+    service.dispose();
+  });
+
+  test('both connection timeouts show the timeout message', () async {
+    final clients = <_TimeoutClient>[];
+    final service = TransitStopsService(
+      cache: TransitStopsCache(),
+      clientFactory: () {
+        final client = _TimeoutClient();
+        clients.add(client);
+        return client;
+      },
+    );
+    await expectLater(
+      service.nearby(TravelMode.bus, 10, 76),
+      throwsA(predicate((e) => e.toString().contains('timed out'))),
+    );
+    expect(clients.length, 2);
+    expect(clients.every((client) => client.closed), isTrue);
+    service.dispose();
+  });
 }
