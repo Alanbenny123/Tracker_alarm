@@ -9,7 +9,7 @@ void main() {
     latitude: 44.65,
     longitude: -63.63,
   );
-  test('a matching area alone is never selected as the shared business', () {
+  test('a matching area alone is not the shared business', () {
     const args = SharedPlaceSearchArgs('Hello pets, Mamangalam, Edappally');
     const area = Place(
       name: 'Mamangalam',
@@ -17,12 +17,9 @@ void main() {
       latitude: 9.98,
       longitude: 76.29,
     );
-    expect(args.matches(area), isTrue);
-    expect(args.singleNamedMatch([area]), isNull);
-    expect(args.singleNamedMatch([]), isNull);
+    expect(args.matches(area), isFalse);
   });
-
-  test('name punctuation does not prevent a unique shared-place match', () {
+  test('name punctuation does not prevent a shared-place match', () {
     const args = SharedPlaceSearchArgs(
       "St. George's Syro-Malabar Church, Kalady",
     );
@@ -32,12 +29,11 @@ void main() {
       latitude: 10,
       longitude: 76,
     );
-    expect(args.singleNamedMatch([church]), same(church));
+    expect(args.matches(church), isTrue);
   });
-
-  test('a shared business in a different locality is not auto-selected', () {
+  test('a shared business in a different locality is filtered out', () {
     const args = SharedPlaceSearchArgs(
-      'Hello pets, Mamangalam, Edappally, Ernakulam, Kerala',
+      'Hello pets, Mamangalam, Edappally, Ernakulam',
     );
     const differentBranch = Place(
       name: 'Hello pets',
@@ -45,7 +41,7 @@ void main() {
       latitude: 11.25,
       longitude: 75.77,
     );
-    expect(args.singleNamedMatch([differentBranch]), isNull);
+    expect(args.matches(differentBranch), isFalse);
   });
   test(
     'business name fallback does not accept an unrelated numbered address',
@@ -65,10 +61,10 @@ void main() {
   test(
     'address matching supports intentionally shared distant destinations',
     () {
+      final halifaxBranch = canada.copyWith(name: 'Hello pets');
       expect(
-        const SharedPlaceSearchArgs(
-          'Hello pets, Halifax, Canada',
-        ).matches(canada),
+        const SharedPlaceSearchArgs('Hello pets, Halifax, Canada')
+            .matches(halifaxBranch),
         isTrue,
       );
     },

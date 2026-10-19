@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,7 @@ import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/scrollable_sheet.dart';
+import '../../widgets/location_disclosure.dart';
 import '../../services/geofence_service.dart';
 import '../home/home_screen.dart';
 import '../map/map_view.dart';
@@ -182,6 +185,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   }
 
   Future<void> _enableLocation() async {
+    if (!await showLocationDisclosure(context) || !mounted) return;
     if (requirements?.preciseLocation != true) {
       await Permission.locationWhenInUse.request();
       if (!mounted) return;
@@ -485,6 +489,32 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           ),
           const SizedBox(height: 8),
           const Text('GPS accuracy can affect when the alarm rings.'),
+          if (position != null &&
+              position.accuracy.isFinite &&
+              position.accuracy > radius)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.gps_not_fixed),
+                title: const Text('GPS accuracy is wider than this radius'),
+                subtitle: Text(
+                  'The last GPS fix was accurate to about ±${position.accuracy.round()} m '
+                  'for a ${radius.round()} m alert radius. Consider a larger '
+                  'radius if you need an earlier warning.',
+                ),
+              ),
+            ),
+          if (selectedMode == TravelMode.metro)
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.gps_off_outlined),
+                title: Text('Metro GPS warning'),
+                subtitle: Text(
+                  'GPS can be weak or unavailable underground. Choose a '
+                  'station and an alert distance before entering a tunnel; '
+                  'the alarm may ring late if there is no GPS fix.',
+                ),
+              ),
+            ),
           const SizedBox(height: 8),
           Center(child: Text('${radius.toInt()} m radius')),
           const SizedBox(height: 12),
@@ -582,7 +612,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                     _requirementTile(
                       title: 'Location: Allow all the time',
                       subtitle:
-                          'Needed to track your destination in the background',
+                          'Needed to track your destination when the app is closed or not in use',
                       done: requirements!.backgroundLocation,
                       onTap: _enableLocation,
                     ),
@@ -855,13 +885,15 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
 }
 
 class ActiveAlarmScreen extends ConsumerStatefulWidget {
-  const ActiveAlarmScreen({super.key});
+  const ActiveAlarmScreen({super.key, this.now});
+  final DateTime Function()? now;
   @override
   ConsumerState<ActiveAlarmScreen> createState() => _ActiveAlarmScreenState();
 }
 
 class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
   bool showMap = false;
+  Timer? _displayRefresh;
 
   Future<void> _editRepeat(String id, int currentDays) async {
     final days = await _pickRepeatDays(context, currentDays);
@@ -882,10 +914,19 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
   @override
   void initState() {
     super.initState();
+    _displayRefresh = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(locationProvider).refreshAndTrack();
     });
+  }
+
+  @override
+  void dispose() {
+    _displayRefresh?.cancel();
+    super.dispose();
   }
 
   @override
@@ -915,12 +956,17 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
       });
     }
     final position = ref.watch(locationProvider).position;
-    final distance = distanceTo(position, alarm.place);
+    final now = widget.now?.call() ?? DateTime.now();
+    final freshPosition = position != null &&
+        !position.timestamp.isBefore(now.subtract(const Duration(seconds: 45))) &&
+        !position.timestamp.isAfter(now.add(const Duration(seconds: 10)));
+    final distance = freshPosition ? distanceTo(position, alarm.place) : null;
+    final lastKnownDistance = freshPosition ? null : distanceTo(position, alarm.place);
     final eta =
         distance != null && position != null && position.speed > 1
             ? Duration(seconds: (distance / position.speed).round())
             : null;
-    final accuracy = position?.accuracy;
+    final accuracy = freshPosition ? position.accuracy : null;
     final quality =
         accuracy == null
             ? 'Waiting for GPS'
@@ -979,6 +1025,13 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
           const Center(
             child: Text('STRAIGHT-LINE DISTANCE', textAlign: TextAlign.center),
           ),
+          if (lastKnownDistance != null)
+            Center(
+              child: Text(
+                'Last known: ${formatDistance(lastKnownDistance)}',
+                textAlign: TextAlign.center,
+              ),
+            ),
           if (eta != null)
             Center(
               child: Text(
@@ -990,8 +1043,11 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
             child: Text(
               alarmState.status == 'paused'
                   ? 'Paused · resume to monitor this destination'
+                  : alarm.repeatDays != 0 &&
+                        alarmState.selected?.distanceReady == false
+                  ? 'Waiting for the next selected repeat day'
                   : distance == null
-                  ? 'Waiting for GPS'
+                  ? 'Waiting for a fresh GPS position'
                   : distance <= alarm.radius
                   ? 'Inside alert zone'
                   : distance <= 1000
@@ -1046,7 +1102,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                   subtitle: Text(
                     alarmState.selected?.lastGpsFixAt == null
                         ? 'No GPS fix available'
-                        : '${_formatDateTime(context, alarmState.selected!.lastGpsFixAt!)} · ${DateTime.now().difference(alarmState.selected!.lastGpsFixAt!).inSeconds.clamp(0, 999999)} s ago',
+                        : '${_formatDateTime(context, alarmState.selected!.lastGpsFixAt!)} · ${now.difference(alarmState.selected!.lastGpsFixAt!).inSeconds.clamp(0, 999999)} s ago',
                   ),
                 ),
                 ListTile(

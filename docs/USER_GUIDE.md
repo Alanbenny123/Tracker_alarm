@@ -7,7 +7,7 @@ Destination Alarm rings when your phone reaches a chosen distance from a destina
 1. Open the app and keep Location turned on.
 2. On **Home**, choose **Bus**, **Metro**, **Railway**, or **Other**.
 3. Find your destination:
-   - **Bus / Metro / Railway:** choose a mapped stop from the list or map. You can search an area, tap a different area on the map, or use **Near me**.
+   - **Bus / Metro / Railway:** choose a mapped stop from the list or map. You can search an area, tap a different area on the map, move the map and tap **Search this area**, or use **Near me**.
    - **Other:** search for a place or tap the map to place a pin. You can move the pin before confirming.
 4. Tap **Confirm destination**. On the setup screen, check the place name and map. Tap **Reselect destination** if it is wrong.
 5. Choose the alert distance. The starting distance is **500 m** for Bus and Metro, and **1 km** for Railway and Other. You can use a preset, slider, or manual entry from **100 m to 2 km**. Manual entry has an **m / km** picker; changing the unit keeps the typed number, so check the resulting radius.
@@ -17,21 +17,29 @@ Destination Alarm rings when your phone reaches a chosen distance from a destina
 
 ## Finding bus stops and stations
 
-Bus and Metro search within **2.5 km** of the chosen area. Railway searches within **5 km**. These results come from mapped, named OpenStreetMap places. A real stop may be missing if it has not been mapped or named. Searches need internet.
+Bus and Metro search within **2.5 km** of the chosen area. Railway searches within **5 km**. Results come from Google Places. A real stop may be missing from its data. Searches need internet.
 
-Use the search box to find an area, then select a result. The app loads stops around that area. You can also tap another map area. If a search fails, the error appears by the search box with **Retry search**. Retry repeats the failed place or stop search. If the server remains busy, search another area or use **Other** and choose a map point.
+Use the search box to find an area, then select a result. The app loads stops around that area. You can also tap another map area. If a search fails, the error appears by the search box with **Retry search**. Retry repeats the failed place or stop search. You can also search another area or use **Other** and choose a map point.
 
-If no places match your search, check the spelling or search a nearby town or landmark. Enter at least three characters. An empty stop list means no named stops for that transport were found within the displayed radius; try another area or use **Other** to select a map point.
+Moving the map does not automatically call Places. Tap **Search this area** to load stops around the map center. This helps when the first area does not show the stop you need.
 
-### Search cache and busy servers
+The stop list shows straight-line distance from the searched point. This is not walking or rail-route distance.
 
-No server account or API key is needed for the current public stop search. If a server asks the app to slow down, follow the displayed cooldown before retrying. Retry cannot bypass it. A temporary server error gets at most one automatic retry.
+Underground metro tunnels can weaken or block GPS. Set the station alarm and a suitable alert distance before entering a tunnel. An alarm may be delayed until the phone receives another location fix.
 
-Stop results are reused for ten minutes across picker visits. If refreshing fails, the app can show previously loaded results for the **same area and transport**, up to 24 hours old, with a visible cache-age notice. These may be out of date. This cache lives only in memory and disappears when Android ends the app process; it does not download a map. Public services can still be unavailable. You can use **Other** to choose a map point, then start the offline GPS alarm.
+If no places match your search, check the spelling or search a nearby town or landmark. Enter at least three characters. An empty stop list means no named stops for that transport were found within the displayed radius; try another area or use **Other** to select a map point. If you submit searches very close together, the app waits briefly and retries a locally throttled request once; canceling that search prevents the retry.
+
+### Search cache
+
+Google Maps and Places require internet and are subject to the developer's Google Cloud quota. Searches happen when submitted, not on every typed character. If a quota or connection error occurs, try later.
+
+Stop results are reused for ten minutes across picker visits. If refreshing fails, the app can show previously loaded results for the **same area and transport**, up to 24 hours old, with a notice. These may be out of date. This cache lives only in memory and disappears when Android ends the app process; it does not download a map. You can use **Other** to choose a map point, then start the offline GPS alarm.
 
 ## Share a place from Google Maps
 
-In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen (up to 12 seconds), or tap Cancel. If the link contains coordinates, review the destination in setup. Otherwise, the app automatically searches the full resolved place name and address to obtain coordinates. When one named place matches, it selects that result and centres the map on its pin. Check the name, address, and coordinates, then tap **Confirm destination**. If several places match, choose the correct result first. A general area result is not automatically selected as a business. If no suitable result is found, refine the address or tap the correct map point.
+In Google Maps, open a place, tap **Share**, and choose **Destination Alarm**. Wait for the loading screen (up to 12 seconds), or tap Cancel. If the link contains coordinates, review the destination in setup. Otherwise, the app searches the full resolved place name and address. Select the correct result, check its pin, name, address, and coordinates, then tap **Confirm destination**. A general area result is not automatically selected as a business. If no suitable result is found, refine the address or tap the correct map point.
+
+If you share another place before the first link finishes opening, the newer share takes priority.
 
 A shortened Google Maps link and place search need internet. Google Maps' downloaded offline maps cannot be imported into this app. Map camera coordinates are not used as destination coordinates. After confirming the destination and starting the alarm, GPS monitoring works offline.
 
@@ -53,7 +61,11 @@ After restarting the phone, check the app's notification. If it says an alert ne
 
 The app uses background location monitoring, a foreground service, and an Android geofence backup where available. Keep the required permissions and unrestricted battery setting enabled. Some phones also need their separate Autostart setting. GPS accuracy and device power management can delay an alert, especially at small radii or higher travel speeds. Do not force-stop the app while relying on an alarm.
 
-After the destination is selected and the alarm starts, monitoring the saved coordinates does **not** require internet. The OpenFreeMap vector map, stop searches, many place searches, and shortened Google Maps links do require internet. The app does not include an offline basemap. The active screen shows straight-line distance while the online map is hidden. If the vector map does not load, the map automatically tries a dark backup source without changing the destination or map position. The map labels the backup source. If both sources fail, tap **Retry map** after reconnecting. The warning clears when the visible map tiles recover; alarms continue monitoring without them.
+The active screen updates the age of the last GPS fix while it remains open. If its visible position is old, it labels the previous distance **Last known** and waits for a fresh position before describing your approach. A repeating alarm waiting for the next selected day says so even if the last measured distance is within the radius.
+
+Setup warns when the last GPS fix's accuracy is wider than your chosen alert radius. In that case, consider a larger radius if you need an earlier warning.
+
+After the destination is selected and the alarm starts, monitoring the saved coordinates does **not** require internet. The Google 2D map, stop searches, place searches, and shortened Google Maps links do require internet. The app does not include an offline basemap. The active screen shows straight-line distance while the online map is hidden. If the map cannot load, reconnect; alarms continue monitoring without it.
 
 The ringing screen and selection sheets can be scrolled. With a small screen or large text, scroll to reach **Stop this alert**, **Snooze**, the remaining choices, or **Save**.
 

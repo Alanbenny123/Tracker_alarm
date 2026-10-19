@@ -1,9 +1,14 @@
 import 'dart:async';
+
 import 'package:flutter/services.dart';
+
 import '../models/place.dart';
 
 class PlacesService {
+  PlacesService({this.rateLimitRetryDelay = const Duration(milliseconds: 1300)});
+
   static const _channel = MethodChannel('tracker_alarm/places');
+  final Duration rateLimitRetryDelay;
   final Map<String, List<Place>> _cache = {};
   Completer<List<Place>>? _pending;
 
@@ -13,18 +18,38 @@ class PlacesService {
     if (pending != null && !pending.isCompleted) pending.complete([]);
   }
 
-  Future<List<Place>> search(String query) async {
+  Future<List<Place>> search(
+    String query, {
+    double? latitude,
+    double? longitude,
+  }) async {
     cancel();
     final text = query.trim();
     if (text.length < 3) return [];
-    final key = text.toLowerCase();
+    final hasBias =
+        latitude != null &&
+        longitude != null &&
+        latitude.isFinite &&
+        longitude.isFinite &&
+        latitude.abs() <= 90 &&
+        longitude.abs() <= 180;
+    final key =
+        '${text.toLowerCase()}:${hasBias ? latitude.toStringAsFixed(2) : ''}:'
+        '${hasBias ? longitude.toStringAsFixed(2) : ''}';
     if (_cache.containsKey(key)) return _cache[key]!;
     final pending = Completer<List<Place>>();
     _pending = pending;
     try {
-      // Android Geocoder has no cancel API. Ignore its eventual callback after
-      // replacement/disposal, and complete the Dart lookup immediately.
-      final places = await Future.any([_search(text), pending.future]);
+      // Ignore a replaced native Places callback; it may already be in flight.
+      final places = await Future.any([
+        _search(
+          text,
+          pending: pending,
+          latitude: hasBias ? latitude : null,
+          longitude: hasBias ? longitude : null,
+        ),
+        pending.future,
+      ]);
       if (!identical(_pending, pending)) return [];
       _cache[key] = places;
       return places;
@@ -33,18 +58,34 @@ class PlacesService {
     }
   }
 
-  Future<List<Place>> _search(String text) async {
+  Future<List<Place>> _search(
+    String text, {
+    required Completer<List<Place>> pending,
+    double? latitude,
+    double? longitude,
+  }) async {
     try {
-      final response = await _channel
-          .invokeMethod<List<dynamic>>('search', {'query': text})
+      Future<List<dynamic>?> request() => _channel
+          .invokeMethod<List<dynamic>>('search', {
+            'query': text,
+            if (latitude != null && longitude != null) ...{
+              'latitude': latitude,
+              'longitude': longitude,
+            },
+          })
           .timeout(const Duration(seconds: 12));
-      final places =
-          (response ?? [])
-              .map(
-                (item) =>
-                    Place.fromJson(Map<String, dynamic>.from(item as Map)),
-              )
-              .toList();
+      List<dynamic>? response;
+      try {
+        response = await request();
+      } on PlatformException catch (e) {
+        if (e.code != 'rate_limit') rethrow;
+        await Future<void>.delayed(rateLimitRetryDelay);
+        if (!identical(_pending, pending)) return [];
+        response = await request();
+      }
+      final places = (response ?? [])
+          .map((item) => Place.fromJson(Map<String, dynamic>.from(item as Map)))
+          .toList();
       return places;
     } on PlatformException catch (e) {
       throw Exception(

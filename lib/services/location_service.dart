@@ -7,12 +7,11 @@ class LocationService {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const LocationException('Turn on location services to use GPS.');
     }
-    var permission = await Geolocator.checkPermission();
+    final permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (permission == LocationPermission.denied) {
-      throw const LocationException('Location permission was denied.');
+      throw const LocationException(
+        'Location permission is off. Tap Enable location to turn it on.',
+      );
     }
     if (permission == LocationPermission.deniedForever) {
       throw const LocationException(

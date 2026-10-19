@@ -13,12 +13,15 @@ import 'package:tracker_alarm/services/places_service.dart';
 import 'package:tracker_alarm/services/transit_stops_service.dart';
 
 import 'helpers/alarm_fakes.dart';
-import 'support/fake_maplibre.dart';
 
 class _Places extends PlacesService {
   final requests = <Completer<List<Place>>>[];
   @override
-  Future<List<Place>> search(String query) {
+  Future<List<Place>> search(
+    String query, {
+    double? latitude,
+    double? longitude,
+  }) {
     final pending = Completer<List<Place>>();
     requests.add(pending);
     return pending.future;
@@ -27,6 +30,7 @@ class _Places extends PlacesService {
 
 class _Stops extends TransitStopsService {
   final requests = <Completer<List<Place>>>[];
+  final centers = <LatLng>[];
   int cancellations = 0;
   @override
   Future<List<Place>> nearby(
@@ -34,6 +38,7 @@ class _Stops extends TransitStopsService {
     double latitude,
     double longitude,
   ) {
+    centers.add(LatLng(latitude, longitude));
     final pending = Completer<List<Place>>();
     requests.add(pending);
     return pending.future;
@@ -44,43 +49,42 @@ class _Stops extends TransitStopsService {
 }
 
 void main() {
-  testWidgets('map warning stays visible above destination search', (
+  testWidgets('stop results show distance from the searched center', (
     tester,
   ) async {
-    final native = FakeMapLibrePlatform.shared;
-    native.reset();
-    native.autoIdle = false;
-    addTearDown(native.reset);
-    await tester.pumpWidget(_app(_Places(), _Stops()));
+    final places = _Places();
+    final stops = _Stops();
+    await tester.pumpWidget(_app(places, stops, TravelMode.bus));
     await tester.pump();
-    expect(native.states, hasLength(1));
+    stops.requests.single.complete([stationNearby]);
+    await tester.pump();
+    expect(find.textContaining('m from search point'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 
-    await tester.pump(const Duration(seconds: 10));
+  testWidgets('panning the map searches a new area only after a tap', (
+    tester,
+  ) async {
+    final places = _Places();
+    final stops = _Stops();
+    await tester.pumpWidget(_app(places, stops, TravelMode.metro));
     await tester.pump();
-    final loadingText = find.textContaining('Trying backup map');
-    expect(loadingText, findsOneWidget);
-    expect(
-      tester.getBottomLeft(loadingText).dy,
-      lessThan(tester.getTopLeft(find.byType(TextField)).dy),
-    );
-    expect(native.states, hasLength(1));
+    expect(stops.centers, [const LatLng(9.9, 76.7)]);
+    stops.requests.single.complete([]);
+    await tester.pump();
 
-    await tester.pump(const Duration(seconds: 10));
-    await tester.pump();
-    expect(
-      find.textContaining('Both map sources could not load'),
-      findsOneWidget,
+    tester.widget<MapView>(find.byType(MapView)).onCameraMove!(
+      const LatLng(10.1, 76.2),
     );
-    await tester.tap(find.text('Retry map'));
     await tester.pump();
-    expect(
-      native.states.single.styles.last,
-      'https://tiles.openfreemap.org/styles/liberty',
-    );
-    native.states.single.emitIdle();
+    expect(stops.requests, hasLength(1));
+    await tester.tap(find.text('Search this area'));
     await tester.pump();
-    expect(find.text('Retry map'), findsNothing);
-    expect(native.states, hasLength(1));
+    expect(stops.centers.last, const LatLng(10.1, 76.2));
+    expect(stops.requests, hasLength(2));
+    stops.requests.last.complete([stationA]);
+    await tester.pump();
+    expect(find.text('Station A'), findsWidgets);
     await tester.pumpWidget(const SizedBox());
   });
 

@@ -3,16 +3,42 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../models/place.dart';
 import '../../models/repeat_schedule.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/scrollable_sheet.dart';
+import '../../widgets/location_disclosure.dart';
 import '../../services/storage_service.dart';
 import '../map/map_view.dart';
 import '../alarm/alarm_actions.dart';
 import '../alarm/test_alarm_button.dart';
+
+const _privacyPolicyUrl =
+    'https://github.com/Alanbenny123/Tracker_alarm/blob/main/docs/PRIVACY_POLICY.md';
+const _termsOfUseUrl =
+    'https://github.com/Alanbenny123/Tracker_alarm/blob/main/docs/TERMS_OF_USE.md';
+
+Future<void> _openLegalPage(BuildContext context, String url) async {
+  try {
+    if (await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
+      return;
+    }
+  } catch (_) {
+    // Show the same recovery instruction for a missing browser or failed link.
+  }
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Could not open the page. Check your connection and try again.',
+        ),
+      ),
+    );
+  }
+}
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key, this.initialIndex = 0});
@@ -155,6 +181,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
 class _HomeTab extends ConsumerWidget {
   const _HomeTab();
+
+  Future<void> _refreshLocation(BuildContext context, WidgetRef ref) async {
+    final permission = await Permission.locationWhenInUse.status;
+    if (!context.mounted) return;
+    if (!permission.isGranted) {
+      if (!await showLocationDisclosure(context) || !context.mounted) return;
+      final result = await Permission.locationWhenInUse.request();
+      if (result.isPermanentlyDenied) await openAppSettings();
+      if (!context.mounted) return;
+    }
+    await ref.read(locationProvider).refreshAndTrack();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final location = ref.watch(locationProvider);
@@ -250,8 +289,10 @@ class _HomeTab extends ConsumerWidget {
         if (location.error != null)
           _InfoMessage(
             message: location.error!,
-            action: 'Try again',
-            onPressed: () => ref.read(locationProvider).refreshAndTrack(),
+            action: location.error!.contains('permission')
+                ? 'Enable location'
+                : 'Try again',
+            onPressed: () => _refreshLocation(context, ref),
           )
         else
           ListTile(
@@ -640,7 +681,7 @@ class _SettingsTab extends ConsumerWidget {
           const ListTile(
             leading: Icon(Icons.map_outlined),
             title: Text('Map type'),
-            subtitle: Text('MapLibre · OpenFreeMap vector · dark backup'),
+            subtitle: Text('Google Maps · standard 2D map'),
           ),
           const Divider(),
           const ListTile(
@@ -731,16 +772,45 @@ class _SettingsTab extends ConsumerWidget {
             subtitle: const Text('How location and search are used'),
             onTap: () => showDialog<void>(
               context: context,
-              builder: (context) => AlertDialog(
+              builder: (dialogContext) => AlertDialog(
                 title: const Text('Privacy policy'),
                 content: const SingleChildScrollView(
                   child: Text(
-                    'Your active destination, saved places, settings, and up to 100 recent trips are stored on this device. Android cloud backup and device transfer are disabled. You can delete trip history, saved places, and damaged recovery copies in Settings. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Place queries may be processed by your device geocoding provider. Shared Google Maps links are opened through Google. If the normal short-link connection fails, Google Public DNS over HTTPS may receive the short-link hostname, not the destination or full shared URL. Bus, metro, and railway stop searches send the searched area’s coordinates to the public Overpass API. Map requests go to OpenFreeMap for vector tiles, or to queeniemella.cc when the primary map does not load. These requests may reveal the viewed area and your IP address to the map provider.',
+                    'Your active destination, saved places, settings, and up to 100 recent trips are stored on this device. Android cloud backup and device transfer are disabled. You can delete trip history, saved places, and damaged recovery copies in Settings. The app uses location to display your position and monitor the destination alarm. Destination monitoring does not require internet after setup. The app currently has no account, analytics, or app server. Google Maps receives map requests; Google Places receives place search text and the searched area’s coordinates for bus, metro, and railway stop searches. Google may process these requests under its own terms and privacy policy. Shared Google Maps links are opened through Google. If the normal short-link connection fails, Google Public DNS over HTTPS may receive the short-link hostname, not the destination or full shared URL. Map and search requests may reveal the viewed or searched area and your IP address to Google.',
                   ),
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () => _openLegalPage(context, _privacyPolicyUrl),
+                    child: const Text('Full policy'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          ListTile(
+            title: const Text('Terms of use'),
+            subtitle: const Text('Alarm limitations and Google service terms'),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (dialogContext) => AlertDialog(
+                title: const Text('Terms of use'),
+                content: const SingleChildScrollView(
+                  child: Text(
+                    'Destination alarms are approximate. GPS, battery settings, or poor signal can delay or prevent an alert, especially underground. Check your route and surroundings yourself. Maps and place information are provided through Google services and follow Google’s terms and privacy policy.',
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => _openLegalPage(context, _termsOfUseUrl),
+                    child: const Text('Full terms'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(dialogContext),
                     child: const Text('Close'),
                   ),
                 ],

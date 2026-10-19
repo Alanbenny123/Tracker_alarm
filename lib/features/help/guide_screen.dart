@@ -27,26 +27,22 @@ class GuideScreen extends StatelessWidget {
         const _GuideStep(
           number: '2',
           title: 'Choose a destination',
-          detail:
-              'Search an area or place, choose a stop from the list or map, then tap Confirm destination.',
+          detail: 'Search an area or place, choose a stop from the list or map, then tap Confirm destination.',
         ),
         const _GuideStep(
           number: '3',
           title: 'Set your alert',
-          detail:
-              'Check the destination, choose a distance, and optionally choose repeat weekdays, sound, and vibration.',
+          detail: 'Check the destination, choose a distance, and optionally choose repeat weekdays, sound, and vibration.',
         ),
         const _GuideStep(
           number: '4',
           title: 'Complete phone settings',
-          detail:
-              'Allow precise location all the time, notifications, Alarms & reminders, lock-screen alarms, and unrestricted battery use when the setup screen asks.',
+          detail: 'Allow precise location all the time, notifications, Alarms & reminders, lock-screen alarms, and unrestricted battery use when the setup screen asks.',
         ),
         const _GuideStep(
           number: '5',
           title: 'Start the alarm',
-          detail:
-              'Tap Start alarm. Keep location services on while travelling; the active screen shows distance and GPS status.',
+          detail: 'Tap Start alarm. Keep location services on while travelling; the active screen shows distance and GPS status.',
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
@@ -61,8 +57,8 @@ class GuideScreen extends StatelessWidget {
           icon: Icons.travel_explore,
           title: 'Finding a destination',
           points: [
-            'Bus and Metro show mapped stops or stations within 2.5 km of your current position, a searched area, or a point you tap on the map. Railway searches within 5 km. Only mapped, named stops can appear.',
-            'Search an area, then choose a stop from the list or its map pin. Changing the query or transport cancels the previous search. For Other, search a place or tap the map to set an exact point. You can move the pin before confirming.',
+            'Bus and Metro show mapped stops or stations within 2.5 km of your current position, a searched area, or a point you tap on the map. Railway searches within 5 km. Move the map and tap Search this area to look around its center. Only mapped, named stops can appear.',
+            'Search an area, then choose a stop from the list or its map pin. The stop list shows straight-line distance from the searched point. Changing the query or transport cancels the previous search. For Other, search a place or tap the map to set an exact point. You can move the pin before confirming.',
             'On the setup screen, use Reselect destination to choose a different place before starting the alarm.',
           ],
         ),
@@ -72,7 +68,8 @@ class GuideScreen extends StatelessWidget {
           points: [
             'In Google Maps, open a place, tap Share, and choose Destination Alarm. Wait while the shared link is read (up to 12 seconds), or tap Cancel. Then check the place on the setup screen.',
             'If opening a link fails, tap Retry. The app can retry Google short links with an HTTPS DNS fallback; your phone’s DNS settings are not changed. It does not automatically search a generic business name after a connection failure.',
-            'If a shared link has no coordinates, the app searches its full place name and address. One matching named place is selected on the map with its coordinates. Check the pin and tap Confirm destination. If several places match, select the correct result first. If none match, refine the address or tap the correct map point. Link resolution and place search need internet.',
+            'If a shared link has no coordinates, the app searches its full place name and address. Select the correct result, check its map pin and coordinates, then tap Confirm destination. If none match, refine the address or tap the correct map point. Link resolution and place search need internet.',
+            'If you share a second place while the first link is still opening, the latest share takes priority.',
             'Google Maps offline downloads cannot be imported into this app.',
           ],
         ),
@@ -84,7 +81,7 @@ class GuideScreen extends StatelessWidget {
             'The displayed distance is straight-line GPS distance. Roads and railway routes can be longer. Speed-based estimates also use this direct distance.',
             'Repeat is optional. Select the weekdays when the distance alarm should run. With no days selected, it is a one-time alarm. You can edit repeat days on the active alarm screen. If the first selected day is later, you can save the alarm without waiting for a GPS fix; keep the required permissions enabled for that day.',
             'Use the alarm menu to Rename, Edit destination and settings, Duplicate, or Pause/Resume. Duplicate opens setup for review before creating a separate alarm. Paused alarms stay saved and do not ring until resumed; missed time reminders are skipped.',
-            'The active screen shows the last native GPS update, accuracy, and next repeat day. Unknown readings and paused schedules are labeled.',
+            'The active screen shows the last native GPS update, accuracy, and next repeat day. Its distance is marked last known when the visible GPS position gets old. A repeating alarm waiting for a selected day says so even if you are near the destination.',
             'You can keep up to ten alarms active, including several for one destination or different destinations. Use Add another alarm on the active screen or start from Home. Each alarm has its own radius and repeat days.',
           ],
         ),
@@ -95,6 +92,7 @@ class GuideScreen extends StatelessWidget {
             'The setup screen checks precise location, Location: Allow all the time, notifications (including the alarm and tracking channels), Alarms & reminders, lock-screen alarms, and Unrestricted or No restrictions battery use. Complete these settings before starting an alarm.',
             'Manual battery confirmation expires when you leave the app or after 15 minutes. Recheck No restrictions before confirming again. Zero alarm volume or Do Not Disturb may silence the alert; setup shows warnings for these settings.',
             'Keep phone location services on. If your phone has an Autostart control, allow this app there too. Some phones may still delay background GPS; choose a larger distance when travelling quickly.',
+            'Underground metro tunnels can weaken or block GPS. Set the alarm and a suitable radius before entering a tunnel; an alert may be delayed until the phone gets another position.',
             'When the alarm rings, open its notification or the app to snooze or stop it. Alarms & reminders access lets short snoozes ring while the phone is idle. Force-stopping the app stops background monitoring.',
           ],
         ),
@@ -129,13 +127,14 @@ class GuideScreen extends StatelessWidget {
           icon: Icons.refresh_outlined,
           title: 'If search or an alarm has a problem',
           points: [
-            'If a stop or place search fails, tap Retry search beside the error. Check your connection, then try another area or a point on the map if needed. Public stop data and server availability vary.',
-            'Busy-server responses apply a cooldown before retrying. Recently loaded stops are reused across visits; if refreshing fails, older cached stops may be shown with their age. Cached stops expire after 24 hours and disappear when the app process ends. This does not download map tiles.',
+            'If a stop or place search fails, tap Retry search beside the error. Check your connection, then try another area or a point on the map if needed. If you search again too quickly, the app waits briefly and retries that request once. Google Places coverage varies.',
+            'Searches run when requested, with a short pause between requests. Recently loaded stops are reused across visits; if refreshing fails, recent cached stops may be shown. This does not download map tiles.',
             'If no places match, check spelling or search a nearby town or landmark. Enter at least three characters. An empty stop list means no mapped, named stops were found in that search radius.',
-            'If the OpenFreeMap vector map does not load, the app automatically tries a dark backup map. If both sources fail, reconnect and tap Retry map. GPS monitoring continues without the map.',
+            'Google Maps needs an internet connection to display map data. GPS alarm monitoring continues without the map.',
             'On small screens or with large text, scroll the ringing screen and selection sheets to reach the remaining actions and choices.',
             'If Near me waits for GPS, turn on location services or search an area instead. The GPS status on the active screen shows when reception is weak.',
             'If the phone stays silent while locked, recheck background location, notifications, Alarms & reminders, lock-screen alarms, and unrestricted battery use. A small alert radius or poor GPS reception can delay an alarm.',
+            'If the last GPS fix is less accurate than your selected alert radius, setup warns you. Consider a larger radius for an earlier warning, especially while moving quickly.',
           ],
         ),
         const _GuideSection(
@@ -216,7 +215,10 @@ class _GuideSection extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [const Text('•  '), Expanded(child: Text(point))],
+              children: [
+                const Text('•  '),
+                Expanded(child: Text(point)),
+              ],
             ),
           ),
       ],

@@ -13,7 +13,6 @@ import 'package:tracker_alarm/services/shared_location_service.dart';
 
 import 'helpers/alarm_fakes.dart';
 import 'helpers/raw_memory_storage.dart';
-import 'support/fake_maplibre.dart';
 
 class _Native extends FakeNative {
   @override
@@ -47,12 +46,74 @@ class _NamedShareService extends SharedLocationService {
   }
 }
 
+class _OverlappingShareService extends SharedLocationService {
+  final first = Completer<Place?>();
+  final second = Completer<Place?>();
+
+  @override
+  Future<Place?> parse(String text) =>
+      text == 'first' ? first.future : second.future;
+}
+
 void main() {
+  testWidgets('a newer share prevents the older place from opening', (
+    tester,
+  ) async {
+    String? pending = 'first';
+    final service = _OverlappingShareService();
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(SharedLocationService.channel, (
+      _,
+    ) async {
+      final text = pending;
+      pending = null;
+      return text;
+    });
+    addTearDown(
+      () => messenger.setMockMethodCallHandler(
+        SharedLocationService.channel,
+        null,
+      ),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          storageProvider.overrideWith((ref) => RawMemoryStorage()),
+          geofenceProvider.overrideWithValue(_Native()),
+          locationServiceProvider.overrideWithValue(_Location()),
+        ],
+        child: TrackerAlarmApp(sharedLocationService: service),
+      ),
+    );
+    await tester.pump();
+    pending = 'second';
+    final handled = Completer<void>();
+    messenger.handlePlatformMessage(
+      SharedLocationService.channel.name,
+      const StandardMethodCodec().encodeMethodCall(
+        const MethodCall('sharedText'),
+      ),
+      (_) => handled.complete(),
+    );
+    await tester.pump();
+    await handled.future;
+    service.first.complete(stationA);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Station A'), findsNothing);
+    service.second.complete(stationB);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(find.text('Station B'), findsOneWidget);
+    expect(find.text('Station A'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   for (final ambiguous in [false, true]) {
     testWidgets(
       ambiguous
           ? 'a shared place with multiple matching pins asks the user to choose'
-          : 'a shared place without coordinates searches and selects its matching pin',
+          : 'a shared place without coordinates requires choosing its matching pin',
       (tester) async {
         const text = 'https://maps.app.goo.gl/wn1hjHyCztTvCcSZ6';
         final shared = stationA.copyWith(
@@ -112,21 +173,16 @@ void main() {
         await tester.pumpAndSettle();
         expect(searches, ["St. George's Syro-Malabar Church, Kalady"]);
         expect(find.text('Unrelated church'), findsNothing);
-        if (ambiguous) {
-          expect(
-            tester.widget<MapView>(find.byType(MapView)).destination,
-            isNull,
-          );
-          expect(find.text('Confirm destination'), findsNothing);
-          await tester.tap(find.text(shared.name).first);
-          await tester.pumpAndSettle();
-        }
+        expect(
+          tester.widget<MapView>(find.byType(MapView)).destination,
+          isNull,
+        );
+        expect(find.text('Confirm destination'), findsNothing);
+        await tester.tap(find.text(shared.name).first);
+        await tester.pumpAndSettle();
         final map = tester.widget<MapView>(find.byType(MapView));
         expect(map.destination?.latitude, shared.latitude);
         expect(map.destination?.longitude, shared.longitude);
-        final camera = FakeMapLibrePlatform.shared.states.last.camera!;
-        expect(camera.center.lat, shared.latitude);
-        expect(camera.center.lon, shared.longitude);
         expect(find.text('Confirm destination'), findsOneWidget);
         expect(
           find.textContaining('This link has no exact coordinates'),

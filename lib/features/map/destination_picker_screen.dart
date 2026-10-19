@@ -46,6 +46,7 @@ class _DestinationPickerScreenState
   List<Place> stops = [];
   Place? selected;
   LatLng? areaCenter;
+  LatLng? cameraCenter;
   String? areaName;
   String? error;
   _SearchErrorSource? errorSource;
@@ -56,16 +57,6 @@ class _DestinationPickerScreenState
   bool stopsLoaded = false;
   String? queryHint;
   String? transitNotice;
-  MapLoadNotice? mapLoadNotice;
-  VoidCallback? retryMap;
-
-  void _onMapLoadNoticeChanged(MapLoadNotice? notice, VoidCallback retry) {
-    if (!mounted || mapLoadNotice == notice) return;
-    setState(() {
-      mapLoadNotice = notice;
-      retryMap = retry;
-    });
-  }
 
   @override
   void initState() {
@@ -138,21 +129,20 @@ class _DestinationPickerScreenState
     });
     if (text.length < 3) return;
     try {
-      final received = await placesService.search(text);
+      final position = ref.read(locationProvider).position;
+      final received = await placesService.search(
+        text,
+        latitude: position?.latitude,
+        longitude: position?.longitude,
+      );
       final found = widget.sharedPlace
           ? received.where(SharedPlaceSearchArgs(text).matches).toList()
           : received;
       if (!mounted || generation != searchGeneration) return;
-      final sharedSelection =
-          widget.sharedPlace &&
-              text == widget.initialQuery?.trim() &&
-              !mode.usesStops
-          ? SharedPlaceSearchArgs(text).singleNamedMatch(found)
-          : null;
       setState(() {
-        selected = sharedSelection;
-        sharedResultSelected = sharedSelection != null;
-        results = sharedSelection == null ? found : [];
+        // A shared link without coordinates supplies a search hint, not an
+        // exact pin. Let the user choose the result before confirming it.
+        results = found;
         searching = false;
         emptyPlaceQuery = found.isEmpty ? text : null;
       });
@@ -174,6 +164,7 @@ class _DestinationPickerScreenState
       results = [];
       stops = [];
       areaCenter = null;
+      cameraCenter = null;
       areaName = null;
       error = null;
       errorSource = null;
@@ -197,6 +188,15 @@ class _DestinationPickerScreenState
       return;
     }
     _loadStops(LatLng(position.latitude, position.longitude), 'Near me');
+  }
+
+  void _searchMapArea() {
+    final center = cameraCenter ?? areaCenter;
+    if (center == null) {
+      _loadNearby();
+      return;
+    }
+    _loadStops(center, 'Map area');
   }
 
   Future<void> _loadStops(LatLng center, String name) async {
@@ -261,6 +261,7 @@ class _DestinationPickerScreenState
       setState(() {
         _cancelLookups();
         selected = place;
+        sharedResultSelected = widget.sharedPlace;
         results = [];
         error = null;
         errorSource = null;
@@ -277,6 +278,19 @@ class _DestinationPickerScreenState
       error = null;
       errorSource = null;
     });
+  }
+
+  String _stopSubtitle(Place stop) {
+    final center = areaCenter;
+    if (center == null) return stop.address;
+    final metres = const Distance()(
+      center,
+      LatLng(stop.latitude, stop.longitude),
+    );
+    final distance = metres < 1000
+        ? '${metres.round()} m'
+        : '${(metres / 1000).toStringAsFixed(1)} km';
+    return '$distance from search point${stop.address.isEmpty ? '' : ' · ${stop.address}'}';
   }
 
   void selectPoint(LatLng point) {
@@ -308,30 +322,6 @@ class _DestinationPickerScreenState
       appBar: AppBar(title: const Text('Choose destination')),
       body: Column(
         children: [
-          Builder(
-            builder: (context) {
-              final notice = mapLoadNotice;
-              if (notice == null) return const SizedBox.shrink();
-              return Material(
-                color: notice == MapLoadNotice.usingBackup
-                    ? Theme.of(context).colorScheme.surfaceContainerHigh
-                    : Theme.of(context).colorScheme.errorContainer,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(notice.message)),
-                      if (notice.canRetry)
-                        TextButton(
-                          onPressed: retryMap,
-                          child: const Text('Retry map'),
-                        ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
           Expanded(
             child: Stack(
               children: [
@@ -344,8 +334,7 @@ class _DestinationPickerScreenState
                   onTap: selectPoint,
                   onPlaceTap: _selectStop,
                   onDestinationDrag: mode.usesStops ? null : selectPoint,
-                  showLoadNotice: false,
-                  onLoadNoticeChanged: _onMapLoadNoticeChanged,
+                  onCameraMove: (center) => cameraCenter = center,
                 ),
                 Positioned(
                   left: 12,
@@ -494,7 +483,7 @@ class _DestinationPickerScreenState
                     child: Card(
                       elevation: 3,
                       child: SizedBox(
-                        height: 225,
+                        height: 245,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -517,6 +506,14 @@ class _DestinationPickerScreenState
                                     child: const Text('Near me'),
                                   ),
                                 ],
+                              ),
+                            ),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: loadingStops ? null : _searchMapArea,
+                                icon: const Icon(Icons.travel_explore),
+                                label: const Text('Search this area'),
                               ),
                             ),
                             Expanded(
@@ -553,7 +550,7 @@ class _DestinationPickerScreenState
                                                 : Icons.train,
                                           ),
                                           title: Text(stop.name),
-                                          subtitle: Text(stop.address),
+                                          subtitle: Text(_stopSubtitle(stop)),
                                           trailing: const Icon(
                                             Icons.chevron_right,
                                           ),

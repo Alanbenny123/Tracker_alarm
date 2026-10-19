@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,66 @@ import 'helpers/alarm_fakes.dart';
 import 'helpers/raw_memory_storage.dart';
 
 void main() {
+  testWidgets('setup warns when the GPS fix is wider than the alert radius', (
+    tester,
+  ) async {
+    final store = RawMemoryStorage();
+    final fix = Position(
+      latitude: 9.9,
+      longitude: 76.7,
+      timestamp: DateTime.now(),
+      accuracy: 800,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          storageProvider.overrideWith((ref) => store),
+          geofenceProvider.overrideWithValue(FakeNative()),
+          locationProvider.overrideWith(
+            (ref) => LocationController(FakeLocation())..position = fix,
+          ),
+        ],
+        child: const MaterialApp(
+          home: AlarmSetupScreen(place: stationA, mode: TravelMode.bus),
+        ),
+      ),
+    );
+    await tester.pump();
+    await _scrollTo(tester, find.text('GPS accuracy is wider than this radius'));
+    expect(find.textContaining('±800 m'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('metro setup warns about underground GPS loss', (tester) async {
+    final store = RawMemoryStorage();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          storageProvider.overrideWith((ref) => store),
+          geofenceProvider.overrideWithValue(FakeNative()),
+          locationServiceProvider.overrideWithValue(FakeLocation()),
+        ],
+        child: const MaterialApp(
+          home: AlarmSetupScreen(place: stationA, mode: TravelMode.metro),
+        ),
+      ),
+    );
+    await tester.pump();
+    await _scrollTo(tester, find.text('Metro GPS warning'));
+    expect(find.text('Metro GPS warning'), findsOneWidget);
+    expect(
+      find.textContaining('weak or unavailable underground'),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'repeat, sound and unit choices remain reachable on small screens',
     (tester) async {

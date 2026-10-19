@@ -11,6 +11,12 @@ val keystorePropertiesFile = rootProject.file("key.properties")
 if (keystorePropertiesFile.exists()) {
     FileInputStream(keystorePropertiesFile).use { keystoreProperties.load(it) }
 }
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    FileInputStream(localPropertiesFile).use { localProperties.load(it) }
+}
+val googleMapsApiKey = localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
 
 android {
     namespace = "com.trackeralarm.app"
@@ -26,6 +32,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        resValue("string", "google_maps_api_key", googleMapsApiKey)
     }
     signingConfigs {
         create("release") {
@@ -48,6 +55,8 @@ tasks.matching { it.name == "packageDebugUnitTestForUnitTest" }.configureEach {
 }
 dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.android.gms:play-services-maps:20.0.0")
+    implementation("com.google.android.libraries.places:places:6.0.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
 }

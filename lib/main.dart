@@ -122,7 +122,11 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
 
   Future<void> _takeSharedLocation({String? retryText}) async {
     if (_handlingShare) {
+      // A newer Android share replaces the previous destination. Do not
+      // navigate to the old result while the new share waits to be read.
       _shareQueued = true;
+      _shareCancelled = true;
+      _shareService.cancel();
       return;
     }
     _handlingShare = true;

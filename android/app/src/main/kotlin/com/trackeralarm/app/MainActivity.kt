@@ -6,14 +6,11 @@ import android.content.Context
 import android.os.Build
 import android.content.Intent
 import android.net.Uri
-import android.location.Address
-import android.location.Geocoder
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.EventChannel
-import java.util.Locale
 
 class MainActivity : FlutterActivity() {
     private val batteryConfirmation = BatteryConfirmation()
@@ -47,6 +44,12 @@ class MainActivity : FlutterActivity() {
     }
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/google_maps_config")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "configured") result.success(getString(R.string.google_maps_api_key).isNotBlank())
+                else result.notImplemented()
+            }
+        GooglePlacesBridge(this, flutterEngine.dartExecutor.binaryMessenger).register()
         statusChannel = EventChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/status")
         statusChannel?.setStreamHandler(AlarmStatusEvents)
         shareChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/share")
@@ -205,39 +208,6 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tracker_alarm/places").setMethodCallHandler { call, result ->
-            if (call.method != "search") { result.notImplemented(); return@setMethodCallHandler }
-            val query = call.argument<String>("query")?.trim()
-            if (query.isNullOrBlank()) { result.success(emptyList<Map<String, Any>>()); return@setMethodCallHandler }
-            if (!Geocoder.isPresent()) { result.error("geocoder", "Place search is unavailable on this device. Tap the map to choose a destination.", null); return@setMethodCallHandler }
-            val geocoder = Geocoder(this, Locale.getDefault())
-            fun deliver(addresses: List<Address>) {
-                runOnUiThread {
-                    result.success(addresses.filter { it.hasLatitude() && it.hasLongitude() }.map { address ->
-                        mapOf(
-                            "name" to (address.featureName ?: address.locality ?: query),
-                            "address" to (address.getAddressLine(0) ?: query),
-                            "latitude" to address.latitude,
-                            "longitude" to address.longitude,
-                        )
-                    })
-                }
-            }
-            if (Build.VERSION.SDK_INT >= 33) {
-                try { geocoder.getFromLocationName(query, 5, object : Geocoder.GeocodeListener {
-                    override fun onGeocode(addresses: MutableList<Address>) { deliver(addresses) }
-                    override fun onError(errorMessage: String?) {
-                        runOnUiThread { result.error("geocoder", errorMessage ?: "Place search failed. Tap the map to choose a destination.", null) }
-                    }
-                }) }
-                catch (e: Exception) { result.error("geocoder", e.message, null) }
-            } else {
-                Thread {
-                    try { deliver(legacySearch(geocoder, query)) }
-                    catch (e: Exception) { runOnUiThread { result.error("geocoder", e.message, null) } }
-                }.start()
-            }
-        }
     }
 
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
@@ -249,6 +219,4 @@ class MainActivity : FlutterActivity() {
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
-    @Suppress("DEPRECATION")
-    private fun legacySearch(geocoder: Geocoder, query: String): List<Address> = geocoder.getFromLocationName(query, 5) ?: emptyList()
 }
