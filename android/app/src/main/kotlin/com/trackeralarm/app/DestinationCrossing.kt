@@ -7,8 +7,8 @@ import kotlin.math.*
 object DestinationCrossing {
     fun fraction(previous: Location?, current: Location, latitude: Double,
                  longitude: Double, radius: Float): Double? {
-        if (previous == null || !previous.hasAccuracy() || !current.hasAccuracy() ||
-            previous.accuracy > radius || current.accuracy > radius) return null
+        if (previous == null || !LocationEvidence.usable(previous, radius) ||
+            !LocationEvidence.usable(current, radius)) return null
         val seconds = if (previous.elapsedRealtimeNanos > 0 && current.elapsedRealtimeNanos > 0)
             (current.elapsedRealtimeNanos - previous.elapsedRealtimeNanos) / 1e9
             else (current.time - previous.time) / 1000.0

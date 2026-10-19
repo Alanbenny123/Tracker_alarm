@@ -188,6 +188,76 @@ class AlarmRuntimeTest {
         assertNull(DestinationCrossing.fraction(fix(-0.0015, 0), fix(-0.0012, 5000), 0.0, 0.0, 100f))
     }
 
+    @Test fun aGpsFixWithoutAccuracyCannotRingButAVerifiedFixCan() {
+        save(entry("verify"))
+        val unverified = Location("gps").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = System.currentTimeMillis()
+        }
+        MultiAlarmRuntime.checkLocation(app, unverified)
+        assertEquals("active", MultiAlarmRuntime.live(app).single().status)
+        MultiAlarmRuntime.checkLocation(app, fix(0.0, 10_000))
+        assertEquals("triggered", MultiAlarmRuntime.live(app).single().status)
+    }
+
+    @Test fun invalidGpsEvidenceCannotTriggerAnAlarmOrAProjectedCrossing() {
+        save(entry("invalid"))
+        val invalidAccuracy = fix(0.0, 10_000, Float.NaN)
+        assertFalse(LocationEvidence.usable(invalidAccuracy, 100f))
+        MultiAlarmRuntime.checkLocation(app, invalidAccuracy)
+        assertEquals("active", MultiAlarmRuntime.live(app).single().status)
+        assertNull(MultiGeofenceReceiver.verifiedDistance(
+            MultiAlarmRuntime.live(app).single(), invalidAccuracy, System.currentTimeMillis()))
+        assertNull(DestinationCrossing.fraction(fix(-0.002, 0), invalidAccuracy,
+            0.0, 0.0, 100f))
+        val invalidCoordinates = fix(0.0, 10_000).apply { longitude = Double.NaN }
+        MultiAlarmRuntime.checkLocation(app, invalidCoordinates)
+        assertEquals("active", MultiAlarmRuntime.live(app).single().status)
+    }
+
+    @Test @Config(sdk = [33]) fun monitoringStatusWaitsForAccuracyUsableByEachAlarm() {
+        save(entry("tight"), entry("wide").copy(radius = 500f))
+        val controller = Robolectric.buildService(MultiTrackingService::class.java)
+            .create().startCommand(0, 1)
+        val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        try {
+            val noAccuracy = Location("gps").apply {
+                latitude = 0.0; longitude = 0.0; time = System.currentTimeMillis()
+            }
+            shadowOf(manager).simulateLocation(noAccuracy)
+            shadowOf(Looper.getMainLooper()).idle()
+            val noAccuracyHealth = MultiTrackingService.health(app, MultiAlarmRuntime.live(app).first())
+            assertTrue(noAccuracyHealth.toString(),
+                noAccuracyHealth["monitoringMessage"].toString().contains("accuracy"))
+            shadowOf(manager).simulateLocation(fix(0.01, 10_000, 300f))
+            shadowOf(Looper.getMainLooper()).idle()
+            val entries = MultiAlarmRuntime.live(app).associateBy { it.id }
+            assertEquals(false, MultiTrackingService.health(app, entries.getValue("tight"))["monitoringHealthy"])
+            assertEquals(true, MultiTrackingService.health(app, entries.getValue("wide"))["monitoringHealthy"])
+            shadowOf(manager).simulateLocation(fix(0.01, 10_000, 10f))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(true, MultiTrackingService.health(app, entries.getValue("tight"))["monitoringHealthy"])
+        } finally { controller.destroy() }
+    }
+
+    @Test fun geofenceBackupRejectsOldMissingOrInaccurateLocations() {
+        val alarm = entry("backup")
+        val now = base + 10_000
+        assertNotNull(MultiGeofenceReceiver.verifiedDistance(alarm, fix(0.0, 9_000), now))
+        assertNull(MultiGeofenceReceiver.verifiedDistance(alarm, null, now))
+        assertNull(MultiGeofenceReceiver.verifiedDistance(alarm, Location("gps").apply {
+            latitude = 0.0
+            longitude = 0.0
+            time = now
+        }, now))
+        assertNull(MultiGeofenceReceiver.verifiedDistance(alarm, fix(0.0, 9_000, 500f), now))
+        assertNull(MultiGeofenceReceiver.verifiedDistance(
+            alarm.copy(monitoringSince = base - 100_000), fix(0.0, -40_000), now))
+        assertNull(MultiGeofenceReceiver.verifiedDistance(
+            alarm.copy(monitoringSince = base + 9_500), fix(0.0, 9_000), now))
+    }
+
     @Test fun notificationDismissKeepsTheOtherAlarmRinging() {
         save(entry("first").apply { status = "triggered"; distanceFired = true; triggeredAt = 1 },
             entry("second").apply { status = "triggered"; distanceFired = true; triggeredAt = 2 })

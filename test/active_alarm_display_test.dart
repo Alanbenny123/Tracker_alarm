@@ -23,6 +23,7 @@ Future<void> _showAlarm(
   required DateTime Function() now,
   required Position fix,
   bool repeatWaiting = false,
+  bool monitoringProblem = false,
 }) async {
   final native = FakeNative();
   await native.multiRegister(
@@ -38,6 +39,12 @@ Future<void> _showAlarm(
   );
   native.entry('active')['distanceReady'] = !repeatWaiting;
   native.entry('active')['lastGpsFixAt'] = now().millisecondsSinceEpoch;
+  if (monitoringProblem) {
+    native.entry('active').addAll({
+      'monitoringHealthy': false,
+      'monitoringMessage': 'Waiting for GPS accuracy before alerting.',
+    });
+  }
   final location = _FixedLocation(fix);
   final controller = AlarmController(
     MemoryStorage(),
@@ -98,8 +105,29 @@ void main() {
       fix: positionAt(stationA.latitude, stationA.longitude),
       repeatWaiting: true,
     );
-    expect(find.text('Waiting for the next selected repeat day'), findsOneWidget);
+    expect(
+      find.text('Waiting for the next selected repeat day'),
+      findsOneWidget,
+    );
     expect(find.text('Inside alert zone'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('active screen explains unreliable GPS before the route status', (
+    tester,
+  ) async {
+    final now = DateTime.now();
+    await _showAlarm(
+      tester,
+      now: () => now,
+      fix: positionAt(10.1, 76.8),
+      monitoringProblem: true,
+    );
+    expect(
+      find.text('Waiting for GPS accuracy before alerting.'),
+      findsOneWidget,
+    );
+    expect(find.text('On the way'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 }

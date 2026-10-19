@@ -1043,6 +1043,9 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
             child: Text(
               alarmState.status == 'paused'
                   ? 'Paused · resume to monitor this destination'
+                  : alarmState.selected?.monitoringHealthy == false
+                  ? alarmState.selected?.monitoringMessage ??
+                        'Waiting for reliable GPS monitoring'
                   : alarm.repeatDays != 0 &&
                         alarmState.selected?.distanceReady == false
                   ? 'Waiting for the next selected repeat day'

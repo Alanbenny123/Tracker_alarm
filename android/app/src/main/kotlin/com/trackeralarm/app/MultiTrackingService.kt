@@ -24,7 +24,7 @@ class MultiTrackingService : Service() {
         private var running: MultiTrackingService? = null
         private var startFailure: String? = null
 
-        fun health(context: Context): Map<String, Any> {
+        fun health(context: Context, alarm: MultiAlarmRuntime.Entry? = null): Map<String, Any> {
             val service = running ?: return mapOf(
                 "monitoringMessage" to (startFailure ?: "Background service not running. Reopen the app to restart."),
                 "monitoringHealthy" to false, "gpsStatus" to "Not monitoring")
@@ -46,17 +46,23 @@ class MultiTrackingService : Service() {
             if (!AlarmReadiness.fullScreenReady(context)) return fix + mapOf(
                 "monitoringMessage" to "Allow lock-screen alarms in Android settings.",
                 "monitoringHealthy" to false, "gpsStatus" to "Check lock-screen access")
-            val distanceActive = MultiAlarmRuntime.live(context).any {
-                !it.distanceFired && it.distanceReady(System.currentTimeMillis())
-            }
-            if (!distanceActive) return fix + mapOf("monitoringMessage" to "Waiting for the next scheduled alert.",
+            val waiting = (if (alarm == null) MultiAlarmRuntime.live(context) else listOf(alarm))
+                .filter {
+                    it.monitoring() && !it.distanceFired &&
+                        it.distanceReady(System.currentTimeMillis())
+                }
+            if (waiting.isEmpty()) return fix + mapOf("monitoringMessage" to "Waiting for the next scheduled alert.",
                 "monitoringHealthy" to true, "gpsStatus" to "Not needed right now")
+            val smallestRadius = waiting.minOf { it.radius }
             val age = if (service.lastFixElapsed == 0L) Long.MAX_VALUE else
                 SystemClock.elapsedRealtime() - service.lastFixElapsed
             val problem = when {
                 !service.gpsEnabled() -> "GPS is off. Turn on location services."
                 service.interval == 0L -> "GPS subscription failed. Check location permissions."
                 age > WAKE_TIMEOUT_MS -> "Waiting for a fresh GPS fix."
+                service.lastAccuracy == Float.MAX_VALUE -> "Waiting for GPS accuracy before alerting."
+                !LocationEvidence.usableAccuracy(service.lastAccuracy, smallestRadius) ->
+                    "GPS accuracy is too wide for the ${smallestRadius.toInt()} m alert radius. Waiting for a better fix."
                 else -> null
             }
             return fix + mapOf(
@@ -105,10 +111,12 @@ class MultiTrackingService : Service() {
     }
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            if (System.currentTimeMillis() - location.time in 0..30_000L) {
+            if (System.currentTimeMillis() - location.time in 0..30_000L &&
+                LocationEvidence.validCoordinates(location)) {
                 lastFixElapsed = SystemClock.elapsedRealtime()
                 lastFixAt = location.time
-                lastAccuracy = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE
+                lastAccuracy = if (location.hasAccuracy() && location.accuracy.isFinite() &&
+                    location.accuracy >= 0f) location.accuracy else Float.MAX_VALUE
             }
             val wanted = MultiAlarmRuntime.checkLocation(this@MultiTrackingService, location)
             if (wanted <= 30_000L && wanted != interval) requestUpdates(wanted)

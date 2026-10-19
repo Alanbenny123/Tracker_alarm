@@ -305,6 +305,26 @@ void main() {
     },
   );
 
+  test('explicit Maps target wins over different embedded data coordinates', () async {
+    final query = await service.parse(
+      'https://www.google.com/maps/search/?api=1&query=9.93%2C76.26&data=!3d9.95!4d76.28',
+    );
+    expect(query?.latitude, 9.93);
+    expect(query?.longitude, 76.26);
+    final pin = await service.parse(
+      'https://www.google.com/maps/place/9.93,76.26/data=!3d9.95!4d76.28',
+    );
+    expect(pin?.latitude, 9.93);
+    expect(pin?.longitude, 76.26);
+    expect(
+      await service.parse(
+        'https://www.google.com/maps/search/?api=1&query=Central%20Station&data=!3d9.95!4d76.28',
+      ),
+      isNull,
+    );
+    expect(service.resolvedQuery, 'Central Station');
+  });
+
   test('rejects coordinates outside the world', () async {
     expect(await service.parse('999,999'), isNull);
   });

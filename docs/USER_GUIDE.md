@@ -33,6 +33,8 @@ If no places match your search, check the spelling or search a nearby town or la
 
 Google Maps and Places require internet and are subject to the developer's Google Cloud quota. Searches happen when submitted, not on every typed character. If a quota or connection error occurs, try later.
 
+Place-name search results are reused for up to ten minutes, then refreshed on the next search. The app keeps at most 64 recent place searches in memory.
+
 Stop results are reused for ten minutes across picker visits. If refreshing fails, the app can show previously loaded results for the **same area and transport**, up to 24 hours old, with a notice. These may be out of date. This cache lives only in memory and disappears when Android ends the app process; it does not download a map. You can use **Other** to choose a map point, then start the offline GPS alarm.
 
 ## Share a place from Google Maps
@@ -62,6 +64,10 @@ After restarting the phone, check the app's notification. If it says an alert ne
 The app uses background location monitoring, a foreground service, and an Android geofence backup where available. Keep the required permissions and unrestricted battery setting enabled. Some phones also need their separate Autostart setting. GPS accuracy and device power management can delay an alert, especially at small radii or higher travel speeds. Do not force-stop the app while relying on an alarm.
 
 The active screen updates the age of the last GPS fix while it remains open. If its visible position is old, it labels the previous distance **Last known** and waits for a fresh position before describing your approach. A repeating alarm waiting for the next selected day says so even if the last measured distance is within the radius.
+
+The **Alarms** list shows **Needs attention** and the monitoring problem when an alarm is unhealthy, including a repeat scheduled for a later day. Open that alarm and follow the displayed permission or GPS guidance.
+
+To reduce false alerts, the background tracker waits for a GPS fix with usable coordinates and an accuracy estimate before treating your phone as inside the radius. The geofence backup also ignores missing, old, or very inaccurate trigger positions. If the accuracy is too wide for an alarm's radius, that alarm shows **Needs attention** and waits for a better fix. Poor reception may delay an alert.
 
 Setup warns when the last GPS fix's accuracy is wider than your chosen alert radius. In that case, consider a larger radius if you need an earlier warning.
 

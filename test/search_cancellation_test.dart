@@ -127,6 +127,34 @@ void main() {
   });
 
   test(
+    'place cache expires and evicts old queries instead of pinning results',
+    () async {
+      var now = DateTime(2026, 1, 1);
+      var requests = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            requests++;
+            return [_place('Result $requests')];
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      final service = PlacesService(clock: () => now);
+      expect((await service.search('Shop')).single.name, 'Result 1');
+      expect((await service.search('Shop')).single.name, 'Result 1');
+      now = now.add(const Duration(minutes: 10));
+      expect((await service.search('Shop')).single.name, 'Result 2');
+      for (var index = 0; index < 64; index++) {
+        await service.search('Shop $index');
+      }
+      expect((await service.search('Shop')).single.name, 'Result 67');
+      expect(requests, 67);
+      service.dispose();
+    },
+  );
+
+  test(
     'replaced stop search ignores late results and caches the new area',
     () async {
       final requests = <Completer<List<dynamic>>>[];

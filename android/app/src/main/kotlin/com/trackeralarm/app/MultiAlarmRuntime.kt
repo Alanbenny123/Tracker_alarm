@@ -188,7 +188,7 @@ object MultiAlarmRuntime {
         migrateLegacy(context)
         checkDue(context)
         return read(context).map { entry ->
-            entry.map() + MultiTrackingService.health(context) + mapOf(
+            entry.map() + MultiTrackingService.health(context, entry) + mapOf(
                 "geofenceStatus" to (geofenceStatus[entry.id] ?: "Not confirmed"))
         }
     }
@@ -577,6 +577,7 @@ object MultiAlarmRuntime {
     @Synchronized fun checkLocation(context: Context, location: Location): Long {
         checkDue(context)
         if (System.currentTimeMillis() - location.time !in 0..30_000L) return 30_000L
+        if (!LocationEvidence.validCoordinates(location)) return 5_000L
         val previous = previousFix
         previousFix = Location(location)
         val entries = live(context)
@@ -599,8 +600,8 @@ object MultiAlarmRuntime {
                     (entry.radius / location.speed * 500).toLong().coerceIn(1_000L, 30_000L))
             }
             if (remaining <= 0f) {
-                if (location.hasAccuracy() && location.accuracy > maxOf(100f, entry.radius)) {
-                    closest = 0f // Seek a more accurate fix before ringing.
+                if (!LocationEvidence.usable(location, entry.radius)) {
+                    closest = 0f // Seek a verified, accurate fix before ringing.
                 } else reached.add(Triple(entry, distances[0], crossing ?: 1.0))
             }
             else if (crossing != null) reached.add(Triple(entry, distances[0], crossing))

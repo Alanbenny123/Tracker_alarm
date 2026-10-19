@@ -451,16 +451,23 @@ class _ActiveAlarmCard extends ConsumerWidget {
   final AlarmProgress entry;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => Card(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final needsAttention = entry.status != 'paused' &&
+        entry.status != 'triggered' &&
+        entry.monitoringHealthy == false;
+    return Card(
     child: ListTile(
       leading: Icon(
         entry.status == 'paused'
             ? Icons.pause_circle_outline
             : entry.status == 'snoozed'
             ? Icons.snooze
+            : needsAttention
+            ? Icons.warning_amber_outlined
             : Icons.notifications_active,
       ),
       title: Text(entry.alarm.displayName),
+      isThreeLine: needsAttention && entry.monitoringMessage != null,
       subtitle: Text(
         '${formatDistance(entry.alarm.radius)} · '
         '${entry.alarm.alertAt == null ? 'Distance only' : '${MaterialLocalizations.of(context).formatMediumDate(entry.alarm.alertAt!)} '
@@ -472,11 +479,14 @@ class _ActiveAlarmCard extends ConsumerWidget {
             ? 'Paused'
             : entry.status == 'snoozed'
             ? 'Snoozed'
+            : needsAttention
+            ? 'Needs attention'
             : entry.alarm.repeatDays != 0 && !entry.distanceReady
             ? 'Scheduled'
-            : entry.monitoringHealthy == false
-            ? 'Needs attention'
-            : 'Monitoring'}',
+            : 'Monitoring'}'
+        '${needsAttention && entry.monitoringMessage != null ? '\n${entry.monitoringMessage}' : ''}',
+        maxLines: needsAttention ? 3 : 2,
+        overflow: TextOverflow.ellipsis,
       ),
       trailing: AlarmActions(entry: entry),
       onTap: () {
@@ -485,6 +495,7 @@ class _ActiveAlarmCard extends ConsumerWidget {
       },
     ),
   );
+  }
 }
 
 class _SavedTab extends ConsumerWidget {

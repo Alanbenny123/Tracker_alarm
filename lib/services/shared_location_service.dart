@@ -170,10 +170,9 @@ class SharedLocationService {
     // pathSegments/queryParameters decode percent escapes once.
     final segments = uri.pathSegments;
     final placeIndex = segments.indexOf('place');
-    final name =
-        placeIndex >= 0 && placeIndex + 1 < segments.length
-            ? segments[placeIndex + 1].replaceAll('+', ' ')
-            : null;
+    final name = placeIndex >= 0 && placeIndex + 1 < segments.length
+        ? segments[placeIndex + 1].replaceAll('+', ' ')
+        : null;
     final value =
         name ?? uri.queryParameters['query'] ?? uri.queryParameters['q'];
     if (value == null) return null;
@@ -182,6 +181,18 @@ class SharedLocationService {
   }
 
   Place? _placeFromText(String text) {
+    final link = RegExp(r'https?://[^\s]+').firstMatch(text)?.group(0);
+    final uri = link == null ? null : Uri.tryParse(link);
+    final explicitQuery = uri == null || !_isGoogleMapsLink(uri)
+        ? null
+        : uri.queryParameters['destination'] ??
+              uri.queryParameters['q'] ??
+              uri.queryParameters['query'];
+    if (explicitQuery != null && _coordinates(explicitQuery) == null) {
+      // A named target needs a place lookup; other data coordinates may only
+      // describe the current map view.
+      return null;
+    }
     String decoded;
     try {
       decoded = Uri.decodeComponent(text);
@@ -190,16 +201,15 @@ class SharedLocationService {
     }
     final coordinates = _coordinates(decoded);
     if (coordinates == null) return null;
-    final link = RegExp(r'https?://[^\s]+').firstMatch(text)?.group(0);
-    final prefix =
-        link == null ? '' : text.substring(0, text.indexOf(link)).trim();
+    final prefix = link == null
+        ? ''
+        : text.substring(0, text.indexOf(link)).trim();
     final placePath = RegExp(r'/place/([^/@?]+)').firstMatch(decoded)?.group(1);
-    final name =
-        prefix.isNotEmpty
-            ? prefix.split('\n').first.trim()
-            : placePath == null
-            ? 'Shared location'
-            : placePath.replaceAll('+', ' ');
+    final name = prefix.isNotEmpty
+        ? prefix.split('\n').first.trim()
+        : placePath == null
+        ? 'Shared location'
+        : placePath.replaceAll('+', ' ');
     return Place(
       name: name.isEmpty ? 'Shared location' : name,
       address:
@@ -226,11 +236,13 @@ class SharedLocationService {
       r'(?:[;?]|$)',
     );
     final plain = RegExp('^\\s*$pair\\s*\$');
+    // An explicit query or coordinate pin is the selected destination. Maps
+    // data may also contain coordinates for the camera or another feature.
     final match =
-        encoded.firstMatch(text) ??
         tagged.firstMatch(text) ??
         placePath.firstMatch(text) ??
         geo.firstMatch(text) ??
+        encoded.firstMatch(text) ??
         plain.firstMatch(text);
     if (match == null) return null;
     final lat = double.tryParse(match.group(1)!);

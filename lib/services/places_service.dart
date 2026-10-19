@@ -5,11 +5,15 @@ import 'package:flutter/services.dart';
 import '../models/place.dart';
 
 class PlacesService {
-  PlacesService({this.rateLimitRetryDelay = const Duration(milliseconds: 1300)});
+  PlacesService({
+    DateTime Function()? clock,
+    this.rateLimitRetryDelay = const Duration(milliseconds: 1300),
+  }) : _now = clock ?? DateTime.now;
 
   static const _channel = MethodChannel('tracker_alarm/places');
+  final DateTime Function() _now;
   final Duration rateLimitRetryDelay;
-  final Map<String, List<Place>> _cache = {};
+  final Map<String, (DateTime, List<Place>)> _cache = {};
   Completer<List<Place>>? _pending;
 
   void cancel() {
@@ -36,7 +40,14 @@ class PlacesService {
     final key =
         '${text.toLowerCase()}:${hasBias ? latitude.toStringAsFixed(2) : ''}:'
         '${hasBias ? longitude.toStringAsFixed(2) : ''}';
-    if (_cache.containsKey(key)) return _cache[key]!;
+    final cached = _cache[key];
+    if (cached != null) {
+      final age = _now().difference(cached.$1);
+      if (age >= Duration.zero && age < const Duration(minutes: 10)) {
+        return cached.$2;
+      }
+      _cache.remove(key);
+    }
     final pending = Completer<List<Place>>();
     _pending = pending;
     try {
@@ -51,8 +62,10 @@ class PlacesService {
         pending.future,
       ]);
       if (!identical(_pending, pending)) return [];
-      _cache[key] = places;
-      return places;
+      final cachedPlaces = List<Place>.unmodifiable(places);
+      _cache[key] = (_now(), cachedPlaces);
+      if (_cache.length > 64) _cache.remove(_cache.keys.first);
+      return cachedPlaces;
     } finally {
       if (identical(_pending, pending)) _pending = null;
     }
