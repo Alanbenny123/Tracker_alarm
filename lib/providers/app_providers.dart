@@ -45,7 +45,7 @@ final alarmProvider = ChangeNotifierProvider<AlarmController>(
 class SettingsController extends ChangeNotifier {
   SettingsController(this._storage);
   final StorageService _storage;
-  ThemeModeSetting theme = ThemeModeSetting.system;
+  ThemeModeSetting theme = ThemeModeSetting.dark;
   double defaultRadius = 500;
   String sound = 'Default alarm';
   bool vibration = true;
@@ -55,7 +55,7 @@ class SettingsController extends ChangeNotifier {
       final storedTheme = await _storage.getString('theme');
       theme = ThemeModeSetting.values.firstWhere(
         (e) => e.name == storedTheme,
-        orElse: () => ThemeModeSetting.system,
+        orElse: () => ThemeModeSetting.dark,
       );
       defaultRadius =
           (await _storage.getDouble('default_radius') ?? 500)

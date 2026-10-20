@@ -279,19 +279,116 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
 }
 
 ThemeData createAppTheme(Brightness brightness) {
-  final scheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF236A68),
-    brightness: brightness,
-  );
+  final dark = brightness == Brightness.dark;
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: const Color(0xFF2BC9C5),
+        brightness: brightness,
+      ).copyWith(
+        primary: dark ? const Color(0xFF4DD9D4) : const Color(0xFF006D70),
+        onPrimary: dark ? const Color(0xFF002F31) : Colors.white,
+        primaryContainer: dark
+            ? const Color(0xFF124448)
+            : const Color(0xFFD4F3F0),
+        onPrimaryContainer: dark
+            ? const Color(0xFFA9F2EE)
+            : const Color(0xFF09383A),
+        secondary: dark ? const Color(0xFF8CC7D1) : const Color(0xFF3C7180),
+        onSecondary: dark ? const Color(0xFF00343B) : Colors.white,
+        secondaryContainer: dark
+            ? const Color(0xFF234D57)
+            : const Color(0xFFD7EAF0),
+        onSecondaryContainer: dark
+            ? const Color(0xFFD2EDF1)
+            : const Color(0xFF173D47),
+        tertiary: dark ? const Color(0xFFF1A365) : const Color(0xFF9A552A),
+        onTertiary: dark ? const Color(0xFF4A2509) : Colors.white,
+        tertiaryContainer: dark
+            ? const Color(0xFF603816)
+            : const Color(0xFFFFE1C9),
+        onTertiaryContainer: dark
+            ? const Color(0xFFFFDFC5)
+            : const Color(0xFF51290F),
+        error: dark ? const Color(0xFFFF8494) : const Color(0xFFB83E55),
+        onError: dark ? const Color(0xFF530815) : Colors.white,
+        surface: dark ? const Color(0xFF11191D) : const Color(0xFFF3F8F7),
+        onSurface: dark ? const Color(0xFFE6F0EF) : const Color(0xFF17282A),
+        surfaceContainerLowest: dark ? const Color(0xFF0D1519) : Colors.white,
+        surfaceContainerLow: dark ? const Color(0xFF19252A) : Colors.white,
+        surfaceContainer: dark
+            ? const Color(0xFF202D32)
+            : const Color(0xFFE8F1F0),
+        surfaceContainerHigh: dark
+            ? const Color(0xFF29383E)
+            : const Color(0xFFDDEAE8),
+        surfaceContainerHighest: dark
+            ? const Color(0xFF33454B)
+            : const Color(0xFFD0E1DF),
+        onSurfaceVariant: dark
+            ? const Color(0xFFACC3C4)
+            : const Color(0xFF4D6467),
+        outline: dark ? const Color(0xFF85A1A3) : const Color(0xFF6D898C),
+        outlineVariant: dark
+            ? const Color(0xFF3D575C)
+            : const Color(0xFFC2D7D5),
+      );
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
     scaffoldBackgroundColor: scheme.surface,
-    appBarTheme: const AppBarTheme(centerTitle: false),
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.surface,
+      foregroundColor: scheme.onSurface,
+      centerTitle: false,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      systemOverlayStyle: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+        systemNavigationBarColor: scheme.surfaceContainerLow,
+        systemNavigationBarIconBrightness: dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+    ),
     cardTheme: CardThemeData(
       elevation: 0,
       color: scheme.surfaceContainerLow,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: scheme.surfaceContainerLow,
+      indicatorColor: scheme.primaryContainer,
+      elevation: 0,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: scheme.surfaceContainerLow,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: scheme.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: scheme.surfaceContainer,
+      selectedColor: scheme.primaryContainer,
+      side: BorderSide(color: scheme.outlineVariant),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      labelStyle: TextStyle(color: scheme.onSurface),
+    ),
+    dividerTheme: DividerThemeData(color: scheme.outlineVariant),
+    snackBarTheme: SnackBarThemeData(
+      backgroundColor: scheme.surfaceContainerHighest,
+      contentTextStyle: TextStyle(color: scheme.onSurface),
+      actionTextColor: scheme.primary,
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(

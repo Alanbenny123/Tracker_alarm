@@ -14,6 +14,7 @@ import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/scrollable_sheet.dart';
 import '../../widgets/location_disclosure.dart';
+import '../../widgets/dashboard_panel.dart';
 import '../../services/geofence_service.dart';
 import '../home/home_screen.dart';
 import '../map/map_view.dart';
@@ -34,65 +35,60 @@ Future<int?> _pickRepeatDays(BuildContext context, int currentDays) {
   return showModalBottomSheet<int>(
     context: context,
     isScrollControlled: true,
-    builder:
-        (sheetContext) => StatefulBuilder(
-          builder:
-              (sheetContext, setSheetState) => ScrollableSheet(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Repeat on selected days',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        children: List.generate(7, (index) {
-                          const labels = [
-                            'Mon',
-                            'Tue',
-                            'Wed',
-                            'Thu',
-                            'Fri',
-                            'Sat',
-                            'Sun',
-                          ];
-                          final bit = 1 << index;
-                          return FilterChip(
-                            label: Text(labels[index]),
-                            selected: (selectedDays & bit) != 0,
-                            onSelected:
-                                (selected) => setSheetState(() {
-                                  selectedDays =
-                                      selected
-                                          ? selectedDays | bit
-                                          : selectedDays & ~bit;
-                                }),
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        'The distance alarm rings only on these days. Leave all days unselected to turn repeat off.',
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: FilledButton(
-                          onPressed:
-                              () => Navigator.pop(sheetContext, selectedDays),
-                          child: const Text('Save'),
-                        ),
-                      ),
-                    ],
-                  ),
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setSheetState) => ScrollableSheet(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Repeat on selected days',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: List.generate(7, (index) {
+                  const labels = [
+                    'Mon',
+                    'Tue',
+                    'Wed',
+                    'Thu',
+                    'Fri',
+                    'Sat',
+                    'Sun',
+                  ];
+                  final bit = 1 << index;
+                  return FilterChip(
+                    label: Text(labels[index]),
+                    selected: (selectedDays & bit) != 0,
+                    onSelected: (selected) => setSheetState(() {
+                      selectedDays = selected
+                          ? selectedDays | bit
+                          : selectedDays & ~bit;
+                    }),
+                  );
+                }),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'The distance alarm rings only on these days. Leave all days unselected to turn repeat off.',
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  onPressed: () => Navigator.pop(sheetContext, selectedDays),
+                  child: const Text('Save'),
                 ),
               ),
+            ],
+          ),
         ),
+      ),
+    ),
   );
 }
 
@@ -258,16 +254,17 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   }
 
   void setTypedRadius(String value) {
-    final entered =
-        radiusUnit == 'm'
-            ? int.tryParse(value)?.toDouble()
-            : double.tryParse(value);
-    final meters =
-        entered == null ? null : entered * (radiusUnit == 'km' ? 1000 : 1);
+    final entered = radiusUnit == 'm'
+        ? int.tryParse(value)?.toDouble()
+        : double.tryParse(value);
+    final meters = entered == null
+        ? null
+        : entered * (radiusUnit == 'km' ? 1000 : 1);
     setState(() {
       if (meters == null || meters < 100 || meters > 2000) {
-        radiusError =
-            radiusUnit == 'km' ? 'Enter 0.1 to 2 km' : 'Enter 100 to 2000 m';
+        radiusError = radiusUnit == 'km'
+            ? 'Enter 0.1 to 2 km'
+            : 'Enter 100 to 2000 m';
       } else {
         radius = meters;
         radiusError = null;
@@ -285,25 +282,24 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   Future<void> pickRadiusUnit() async {
     final unit = await showModalBottomSheet<String>(
       context: context,
-      builder:
-          (context) => ScrollableSheet(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const ListTile(title: Text('Distance unit')),
-                ListTile(
-                  title: const Text('Metres (m)'),
-                  trailing: radiusUnit == 'm' ? const Icon(Icons.check) : null,
-                  onTap: () => Navigator.pop(context, 'm'),
-                ),
-                ListTile(
-                  title: const Text('Kilometres (km)'),
-                  trailing: radiusUnit == 'km' ? const Icon(Icons.check) : null,
-                  onTap: () => Navigator.pop(context, 'km'),
-                ),
-              ],
+      builder: (context) => ScrollableSheet(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('Distance unit')),
+            ListTile(
+              title: const Text('Metres (m)'),
+              trailing: radiusUnit == 'm' ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, 'm'),
             ),
-          ),
+            ListTile(
+              title: const Text('Kilometres (km)'),
+              trailing: radiusUnit == 'km' ? const Icon(Icons.check) : null,
+              onTap: () => Navigator.pop(context, 'km'),
+            ),
+          ],
+        ),
+      ),
     );
     if (unit != null && mounted) setRadiusUnit(unit);
   }
@@ -333,10 +329,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     final position = ref.watch(locationProvider).position;
     final alarm = ref.watch(alarmProvider);
     final distance = distanceTo(position, selectedPlace);
-    final eta =
-        distance != null && position != null && position.speed > 1
-            ? Duration(seconds: (distance / position.speed).round())
-            : null;
+    final eta = distance != null && position != null && position.speed > 1
+        ? Duration(seconds: (distance / position.speed).round())
+        : null;
     final saved = ref
         .watch(placesProvider)
         .places
@@ -358,17 +353,8 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          TextField(
-            controller: labelController,
-            maxLength: 80,
-            decoration: const InputDecoration(
-              labelText: 'Alarm name (optional)',
-              hintText: 'For example, Morning commute',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-
+          const DashboardLabel('Your destination'),
+          const SizedBox(height: 10),
           SizedBox(
             height: 230,
             child: ClipRRect(
@@ -380,196 +366,245 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
               ),
             ),
           ),
-          const SizedBox(height: 14),
-          Text(
-            selectedPlace.name,
-            style: Theme.of(
-              context,
-            ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          Text(selectedPlace.address),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed: _reselectDestination,
-              icon: const Icon(Icons.edit_location_alt_outlined),
-              label: const Text('Reselect destination'),
-            ),
-          ),
           const SizedBox(height: 12),
-          Text(
-            distance == null
-                ? 'Finding straight-line distance…'
-                : '${formatDistance(distance)} away in a straight line',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const Text(
-            'Distance is measured directly to the destination, not along roads or tracks.',
-          ),
-          if (eta != null)
-            Text('Straight-line estimate at current speed: ${_formatEta(eta)}'),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              onPressed:
-                  saved
-                      ? null
-                      : () async {
-                        final name = await _askName(
-                          context,
-                          selectedPlace.name,
-                        );
-                        if (name != null && name.trim().isNotEmpty) {
-                          await ref
-                              .read(placesProvider)
-                              .add(selectedPlace, name);
-                        }
-                      },
-              icon: Icon(saved ? Icons.bookmark : Icons.bookmark_add_outlined),
-              label: Text(saved ? 'Saved place' : 'Save this place'),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Alert me when I am nearby',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children:
-                [100.0, 250.0, 500.0, 1000.0, 2000.0]
-                    .map(
-                      (value) => ChoiceChip(
-                        label: Text(formatDistance(value)),
-                        selected: radius == value,
-                        onSelected: (_) => setRadius(value),
-                      ),
-                    )
-                    .toList(),
-          ),
-          Slider(
-            min: 100,
-            max: 2000,
-            value: radius.clamp(100, 2000),
-            label: formatDistance(radius),
-            onChanged: (value) => setRadius(value.roundToDouble()),
-          ),
-          TextField(
-            controller: radiusController,
-            keyboardType: TextInputType.numberWithOptions(
-              decimal: radiusUnit == 'km',
-            ),
-            inputFormatters: [
-              TextInputFormatter.withFunction((oldValue, newValue) {
-                final pattern =
-                    radiusUnit == 'km'
-                        ? RegExp(r'^\d{0,1}(\.\d{0,3})?$')
-                        : RegExp(r'^\d{0,4}$');
-                return pattern.hasMatch(newValue.text) ? newValue : oldValue;
-              }),
-            ],
-            decoration: InputDecoration(
-              labelText: 'Enter alert distance manually',
-              suffixIcon: TextButton(
-                onPressed: pickRadiusUnit,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+          DashboardPanel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(radiusUnit),
-                    const Icon(Icons.arrow_drop_down),
+                    Expanded(
+                      child: Text(
+                        selectedPlace.name,
+                        style: Theme.of(context).textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                    Icon(
+                      Icons.place,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ],
                 ),
-              ),
-              helperText: radiusUnit == 'km' ? '0.1–2 km' : '100–2000 m',
-              errorText: radiusError,
-              border: const OutlineInputBorder(),
-            ),
-            onChanged: setTypedRadius,
-          ),
-          const SizedBox(height: 8),
-          const Text('GPS accuracy can affect when the alarm rings.'),
-          if (position != null &&
-              position.accuracy.isFinite &&
-              position.accuracy > radius)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.gps_not_fixed),
-                title: const Text('GPS accuracy is wider than this radius'),
-                subtitle: Text(
-                  'The last GPS fix was accurate to about ±${position.accuracy.round()} m '
-                  'for a ${radius.round()} m alert radius. Consider a larger '
-                  'radius if you need an earlier warning.',
+                const SizedBox(height: 4),
+                Text(selectedPlace.address),
+                const SizedBox(height: 12),
+                Text(
+                  distance == null
+                      ? 'Finding straight-line distance…'
+                      : '${formatDistance(distance)} away in a straight line',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              ),
-            ),
-          if (selectedMode == TravelMode.metro)
-            const Card(
-              child: ListTile(
-                leading: Icon(Icons.gps_off_outlined),
-                title: Text('Metro GPS warning'),
-                subtitle: Text(
-                  'GPS can be weak or unavailable underground. Choose a '
-                  'station and an alert distance before entering a tunnel; '
-                  'the alarm may ring late if there is no GPS fix.',
+                const Text(
+                  'Distance is measured directly to the destination, not along roads or tracks.',
                 ),
-              ),
-            ),
-          const SizedBox(height: 8),
-          Center(child: Text('${radius.toInt()} m radius')),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.repeat),
-            title: const Text('Repeat'),
-            subtitle: Text(
-              repeatDays == 0 ? 'Off' : repeatDaysLabel(repeatDays),
-            ),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: _editRepeat,
-          ),
-          const SizedBox(height: 10),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.music_note_outlined),
-            title: const Text('Alarm sound'),
-            subtitle: Text(sound),
-            trailing: const Icon(Icons.chevron_right),
-            onTap:
-                () => showModalBottomSheet<void>(
-                  context: context,
-                  builder:
-                      (context) => ScrollableSheet(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children:
-                              [
-                                    'Default alarm',
-                                    'Bell',
-                                    'Digital',
-                                    'Beep',
-                                    'Wake up',
-                                  ]
-                                  .map(
-                                    (value) => ListTile(
-                                      title: Text(value),
-                                      onTap: () {
-                                        setState(() => sound = value);
-                                        Navigator.pop(context);
-                                      },
-                                    ),
-                                  )
-                                  .toList(),
-                        ),
+                if (eta != null)
+                  Text(
+                    'Straight-line estimate at current speed: ${_formatEta(eta)}',
+                  ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _reselectDestination,
+                      icon: const Icon(Icons.edit_location_alt_outlined),
+                      label: const Text('Reselect destination'),
+                    ),
+                    TextButton.icon(
+                      onPressed: saved
+                          ? null
+                          : () async {
+                              final name = await _askName(
+                                context,
+                                selectedPlace.name,
+                              );
+                              if (name != null && name.trim().isNotEmpty) {
+                                await ref
+                                    .read(placesProvider)
+                                    .add(selectedPlace, name);
+                              }
+                            },
+                      icon: Icon(
+                        saved ? Icons.bookmark : Icons.bookmark_add_outlined,
                       ),
+                      label: Text(saved ? 'Saved place' : 'Save this place'),
+                    ),
+                  ],
                 ),
+              ],
+            ),
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Vibration'),
-            value: vibration,
-            onChanged: (value) => setState(() => vibration = value),
+          const SizedBox(height: 18),
+          TextField(
+            controller: labelController,
+            maxLength: 80,
+            decoration: const InputDecoration(
+              labelText: 'Alarm name (optional)',
+              hintText: 'For example, Morning commute',
+            ),
           ),
+          const DashboardLabel('Alert settings'),
+          const SizedBox(height: 8),
+          DashboardPanel(
+            accent: Theme.of(context).colorScheme.primary,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Alert me when I am nearby',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: [100.0, 250.0, 500.0, 1000.0, 2000.0]
+                      .map(
+                        (value) => ChoiceChip(
+                          label: Text(formatDistance(value)),
+                          selected: radius == value,
+                          onSelected: (_) => setRadius(value),
+                        ),
+                      )
+                      .toList(),
+                ),
+                Slider(
+                  min: 100,
+                  max: 2000,
+                  value: radius.clamp(100, 2000),
+                  label: formatDistance(radius),
+                  onChanged: (value) => setRadius(value.roundToDouble()),
+                ),
+                TextField(
+                  controller: radiusController,
+                  keyboardType: TextInputType.numberWithOptions(
+                    decimal: radiusUnit == 'km',
+                  ),
+                  inputFormatters: [
+                    TextInputFormatter.withFunction((oldValue, newValue) {
+                      final pattern = radiusUnit == 'km'
+                          ? RegExp(r'^\d{0,1}(\.\d{0,3})?$')
+                          : RegExp(r'^\d{0,4}$');
+                      return pattern.hasMatch(newValue.text)
+                          ? newValue
+                          : oldValue;
+                    }),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: 'Enter alert distance manually',
+                    suffixIcon: TextButton(
+                      onPressed: pickRadiusUnit,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(radiusUnit),
+                          const Icon(Icons.arrow_drop_down),
+                        ],
+                      ),
+                    ),
+                    helperText: radiusUnit == 'km' ? '0.1–2 km' : '100–2000 m',
+                    errorText: radiusError,
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: setTypedRadius,
+                ),
+                const SizedBox(height: 8),
+                const Text('GPS accuracy can affect when the alarm rings.'),
+                if (position != null &&
+                    position.accuracy.isFinite &&
+                    position.accuracy > radius)
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.gps_not_fixed),
+                      title: const Text(
+                        'GPS accuracy is wider than this radius',
+                      ),
+                      subtitle: Text(
+                        'The last GPS fix was accurate to about ±${position.accuracy.round()} m '
+                        'for a ${radius.round()} m alert radius. Consider a larger '
+                        'radius if you need an earlier warning.',
+                      ),
+                    ),
+                  ),
+                if (selectedMode == TravelMode.metro)
+                  const Card(
+                    child: ListTile(
+                      leading: Icon(Icons.gps_off_outlined),
+                      title: Text('Metro GPS warning'),
+                      subtitle: Text(
+                        'GPS can be weak or unavailable underground. Choose a '
+                        'station and an alert distance before entering a tunnel; '
+                        'the alarm may ring late if there is no GPS fix.',
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Center(child: Text('${radius.toInt()} m radius')),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const DashboardLabel('Schedule & sound'),
+          const SizedBox(height: 8),
+          DashboardPanel(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Column(
+              children: [
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.repeat),
+                  title: const Text('Repeat'),
+                  subtitle: Text(
+                    repeatDays == 0 ? 'Off' : repeatDaysLabel(repeatDays),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _editRepeat,
+                ),
+                const SizedBox(height: 10),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.music_note_outlined),
+                  title: const Text('Alarm sound'),
+                  subtitle: Text(sound),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    builder: (context) => ScrollableSheet(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children:
+                            [
+                                  'Default alarm',
+                                  'Bell',
+                                  'Digital',
+                                  'Beep',
+                                  'Wake up',
+                                ]
+                                .map(
+                                  (value) => ListTile(
+                                    title: Text(value),
+                                    onTap: () {
+                                      setState(() => sound = value);
+                                      Navigator.pop(context);
+                                    },
+                                  ),
+                                )
+                                .toList(),
+                      ),
+                    ),
+                  ),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Vibration'),
+                  value: vibration,
+                  onChanged: (value) => setState(() => vibration = value),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const DashboardLabel('Before you start'),
           const SizedBox(height: 8),
           Card(
             child: Padding(
@@ -611,8 +646,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                     ),
                     _requirementTile(
                       title: 'Location: Allow all the time',
-                      subtitle:
-                          'Needed to track your destination when the app is closed or not in use',
+                      subtitle: 'Needed to track your destination when the app is closed or not in use',
                       done: requirements!.backgroundLocation,
                       onTap: _enableLocation,
                     ),
@@ -676,9 +710,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       title: 'Battery: Unrestricted',
                       subtitle:
                           requirements!.batteryManuallyConfirmed &&
-                                  !requirements!.batteryOptimizationOff
-                              ? 'Confirmed for this foreground session (up to 15 minutes)'
-                              : 'Choose Unrestricted / No restrictions',
+                              !requirements!.batteryOptimizationOff
+                          ? 'Confirmed for this foreground session (up to 15 minutes)'
+                          : 'Choose Unrestricted / No restrictions',
                       done: requirements!.batteryReady,
                       onTap: _enableBattery,
                     ),
@@ -718,8 +752,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed:
-                          checkingRequirements ? null : _refreshRequirements,
+                      onPressed: checkingRequirements
+                          ? null
+                          : _refreshRequirements,
                       child: const Text('Recheck'),
                     ),
                   ),
@@ -756,66 +791,65 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           FilledButton.icon(
             onPressed:
                 alarm.busy ||
-                        (alarm.alarms.length >= 10 && !widget.editing) ||
-                        radiusError != null ||
-                        checkingRequirements ||
-                        (requirements?.ready != true &&
-                            !(widget.editing &&
-                                alarm.alarms.any(
-                                  (entry) =>
-                                      entry.alarm.id ==
-                                          widget.initialAlarm?.id &&
-                                      entry.status == 'paused',
-                                )))
-                    ? null
-                    : () async {
-                      try {
-                        final controller = ref.read(alarmProvider);
-                        if (widget.editing) {
-                          await controller.updateAlarm(
-                            widget.initialAlarm!.id,
-                            selectedPlace,
-                            radius,
-                            vibration,
-                            sound,
-                            repeatDays,
-                            labelController.text,
-                          );
-                        } else {
-                          // Duplicating copies the displayed distance/repeat/sound settings;
-                          // review and Start create a new, independent alarm ID.
-                          await controller.start(
-                            selectedPlace,
-                            radius,
-                            vibration,
-                            sound,
-                            null,
-                            repeatDays,
-                            0,
-                            null,
-                            labelController.text,
-                          );
-                        }
-                        if (context.mounted) {
-                          context.go(
-                            ref.read(alarmProvider).status == 'triggered'
-                                ? '/triggered'
-                                : '/active',
-                          );
-                        }
-                      } catch (_) {
-                        await _refreshRequirements();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Could not start alarm. Check the message above and your permissions.',
-                              ),
-                            ),
-                          );
-                        }
+                    (alarm.alarms.length >= 10 && !widget.editing) ||
+                    radiusError != null ||
+                    checkingRequirements ||
+                    (requirements?.ready != true &&
+                        !(widget.editing &&
+                            alarm.alarms.any(
+                              (entry) =>
+                                  entry.alarm.id == widget.initialAlarm?.id &&
+                                  entry.status == 'paused',
+                            )))
+                ? null
+                : () async {
+                    try {
+                      final controller = ref.read(alarmProvider);
+                      if (widget.editing) {
+                        await controller.updateAlarm(
+                          widget.initialAlarm!.id,
+                          selectedPlace,
+                          radius,
+                          vibration,
+                          sound,
+                          repeatDays,
+                          labelController.text,
+                        );
+                      } else {
+                        // Duplicating copies the displayed distance/repeat/sound settings;
+                        // review and Start create a new, independent alarm ID.
+                        await controller.start(
+                          selectedPlace,
+                          radius,
+                          vibration,
+                          sound,
+                          null,
+                          repeatDays,
+                          0,
+                          null,
+                          labelController.text,
+                        );
                       }
-                    },
+                      if (context.mounted) {
+                        context.go(
+                          ref.read(alarmProvider).status == 'triggered'
+                              ? '/triggered'
+                              : '/active',
+                        );
+                      }
+                    } catch (_) {
+                      await _refreshRequirements();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Could not start alarm. Check the message above and your permissions.',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
             icon: const Icon(Icons.notifications_active_outlined),
             label: Text(
               alarm.busy
@@ -823,12 +857,12 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                   : (alarm.alarms.length >= 10 && !widget.editing)
                   ? 'Maximum 10 alarms active'
                   : requirements?.ready == true ||
-                      (widget.editing &&
-                          alarm.alarms.any(
-                            (entry) =>
-                                entry.alarm.id == widget.initialAlarm?.id &&
-                                entry.status == 'paused',
-                          ))
+                        (widget.editing &&
+                            alarm.alarms.any(
+                              (entry) =>
+                                  entry.alarm.id == widget.initialAlarm?.id &&
+                                  entry.status == 'paused',
+                            ))
                   ? (widget.editing ? 'Save changes' : 'Start alarm')
                   : 'Complete required settings to start',
             ),
@@ -847,7 +881,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   }) => ListTile(
     leading: Icon(
       done ? Icons.check_circle : Icons.radio_button_unchecked,
-      color: done ? Colors.green : null,
+      color: done ? Theme.of(context).colorScheme.primary : null,
     ),
     title: Text(title),
     subtitle: Text(subtitle),
@@ -859,25 +893,24 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
     final controller = TextEditingController(text: current);
     final result = await showDialog<String>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Save place'),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Place name'),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, controller.text),
-                child: const Text('Save'),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Save place'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Place name'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
     );
     controller.dispose();
     return result;
@@ -957,24 +990,27 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
     }
     final position = ref.watch(locationProvider).position;
     final now = widget.now?.call() ?? DateTime.now();
-    final freshPosition = position != null &&
-        !position.timestamp.isBefore(now.subtract(const Duration(seconds: 45))) &&
+    final freshPosition =
+        position != null &&
+        !position.timestamp.isBefore(
+          now.subtract(const Duration(seconds: 45)),
+        ) &&
         !position.timestamp.isAfter(now.add(const Duration(seconds: 10)));
     final distance = freshPosition ? distanceTo(position, alarm.place) : null;
-    final lastKnownDistance = freshPosition ? null : distanceTo(position, alarm.place);
-    final eta =
-        distance != null && position != null && position.speed > 1
-            ? Duration(seconds: (distance / position.speed).round())
-            : null;
+    final lastKnownDistance = freshPosition
+        ? null
+        : distanceTo(position, alarm.place);
+    final eta = distance != null && position != null && position.speed > 1
+        ? Duration(seconds: (distance / position.speed).round())
+        : null;
     final accuracy = freshPosition ? position.accuracy : null;
-    final quality =
-        accuracy == null
-            ? 'Waiting for GPS'
-            : accuracy <= 20
-            ? 'Excellent'
-            : accuracy <= 80
-            ? 'Good'
-            : 'Weak';
+    final quality = accuracy == null
+        ? 'Waiting for GPS'
+        : accuracy <= 20
+        ? 'Excellent'
+        : accuracy <= 80
+        ? 'Good'
+        : 'Weak';
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -997,65 +1033,78 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          Center(
-            child: Icon(
-              Icons.location_pin,
-              color: Theme.of(context).colorScheme.primary,
-              size: 60,
-            ),
-          ),
-          Center(
-            child: Text(
-              alarm.displayName,
-              style: Theme.of(
-                context,
-              ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 18),
-          Center(
-            child: Text(
-              distance == null ? '—' : formatDistance(distance),
-              style: Theme.of(
-                context,
-              ).textTheme.displayMedium?.copyWith(fontWeight: FontWeight.bold),
-            ),
-          ),
-          const Center(
-            child: Text('STRAIGHT-LINE DISTANCE', textAlign: TextAlign.center),
-          ),
-          if (lastKnownDistance != null)
-            Center(
-              child: Text(
-                'Last known: ${formatDistance(lastKnownDistance)}',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          if (eta != null)
-            Center(
-              child: Text(
-                'Straight-line estimate: ${_formatEta(eta)} at current speed',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          Center(
-            child: Text(
-              alarmState.status == 'paused'
-                  ? 'Paused · resume to monitor this destination'
-                  : alarmState.selected?.monitoringHealthy == false
-                  ? alarmState.selected?.monitoringMessage ??
-                        'Waiting for reliable GPS monitoring'
-                  : alarm.repeatDays != 0 &&
-                        alarmState.selected?.distanceReady == false
-                  ? 'Waiting for the next selected repeat day'
-                  : distance == null
-                  ? 'Waiting for a fresh GPS position'
-                  : distance <= alarm.radius
-                  ? 'Inside alert zone'
-                  : distance <= 1000
-                  ? 'Approaching destination'
-                  : 'On the way',
+          DashboardPanel(
+            accent: Theme.of(context).colorScheme.primary,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const DashboardLabel('Live trip'),
+                    const Spacer(),
+                    Icon(
+                      Icons.radar,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  alarm.displayName,
+                  style: Theme.of(context).textTheme.headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  distance == null ? '—' : formatDistance(distance),
+                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const DashboardLabel('Straight-line distance'),
+                if (lastKnownDistance != null) ...[
+                  const SizedBox(height: 6),
+                  Text('Last known: ${formatDistance(lastKnownDistance)}'),
+                ],
+                if (eta != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Straight-line estimate: ${_formatEta(eta)} at current speed',
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Divider(color: Theme.of(context).colorScheme.outlineVariant),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.adjust,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        alarmState.status == 'paused'
+                            ? 'Paused · resume to monitor this destination'
+                            : alarmState.selected?.monitoringHealthy == false
+                            ? alarmState.selected?.monitoringMessage ??
+                                  'Waiting for reliable GPS monitoring'
+                            : alarm.repeatDays != 0 &&
+                                  alarmState.selected?.distanceReady == false
+                            ? 'Waiting for the next selected repeat day'
+                            : distance == null
+                            ? 'Waiting for a fresh GPS position'
+                            : distance <= alarm.radius
+                            ? 'Inside alert zone'
+                            : distance <= 1000
+                            ? 'Approaching destination'
+                            : 'On the way',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 20),
@@ -1126,9 +1175,9 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                           ? 'Paused · resume to enable repeats'
                           : alarmState.selected?.nextRepeatAt == null
                           ? 'Checking schedule…'
-                          : MaterialLocalizations.of(
-                            context,
-                          ).formatFullDate(alarmState.selected!.nextRepeatAt!),
+                          : MaterialLocalizations.of(context).formatFullDate(
+                              alarmState.selected!.nextRepeatAt!,
+                            ),
                     ),
                   ),
                 ListTile(
@@ -1161,10 +1210,10 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                         : alarmState.status == 'snoozed'
                         ? 'Snoozed'
                         : alarm.repeatDays != 0 &&
-                            alarmState.selected?.distanceReady == false
+                              alarmState.selected?.distanceReady == false
                         ? 'Waiting for the next selected day'
                         : '${alarmState.selected?.monitoringMessage ?? 'Checking background monitoring…'}'
-                            '\nGeofence backup: ${alarmState.selected?.geofenceStatus ?? 'Not confirmed'}',
+                              '\nGeofence backup: ${alarmState.selected?.geofenceStatus ?? 'Not confirmed'}',
                   ),
                 ),
               ],
@@ -1188,35 +1237,34 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap:
                   alarmState.busy ||
-                          (alarmState.selected?.status != 'active' &&
-                              alarmState.selected?.status != 'paused')
-                      ? null
-                      : () => _editRepeat(alarm.id, alarm.repeatDays),
+                      (alarmState.selected?.status != 'active' &&
+                          alarmState.selected?.status != 'paused')
+                  ? null
+                  : () => _editRepeat(alarm.id, alarm.repeatDays),
             ),
           ),
           if (alarmState.status == 'active' || alarmState.status == 'paused')
             OutlinedButton.icon(
-              onPressed:
-                  alarmState.busy
-                      ? null
-                      : () async {
-                        try {
-                          await alarmState.pauseAlarm(
-                            alarm.id,
-                            alarmState.status != 'paused',
-                          );
-                        } catch (_) {
-                          if (!context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                alarmState.error ??
-                                    'Could not change pause setting.',
-                              ),
+              onPressed: alarmState.busy
+                  ? null
+                  : () async {
+                      try {
+                        await alarmState.pauseAlarm(
+                          alarm.id,
+                          alarmState.status != 'paused',
+                        );
+                      } catch (_) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              alarmState.error ??
+                                  'Could not change pause setting.',
                             ),
-                          );
-                        }
-                      },
+                          ),
+                        );
+                      }
+                    },
               icon: Icon(
                 alarmState.status == 'paused' ? Icons.play_arrow : Icons.pause,
               ),
@@ -1232,63 +1280,58 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed:
-                alarmState.busy
-                    ? null
-                    : () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder:
-                            (context) => AlertDialog(
-                              title: Text(
-                                alarm.repeatDays == 0
-                                    ? 'End this trip?'
-                                    : 'Stop this repeating alarm?',
-                              ),
-                              content: Text(alarm.displayName),
-                              actions: [
-                                TextButton(
-                                  onPressed:
-                                      () => Navigator.pop(context, false),
-                                  child: const Text('No'),
-                                ),
-                                FilledButton(
-                                  onPressed: () => Navigator.pop(context, true),
-                                  child: Text(
-                                    alarm.repeatDays == 0
-                                        ? 'End trip'
-                                        : 'Stop alarm',
-                                  ),
-                                ),
-                              ],
+            onPressed: alarmState.busy
+                ? null
+                : () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text(
+                          alarm.repeatDays == 0
+                              ? 'End this trip?'
+                              : 'Stop this repeating alarm?',
+                        ),
+                        content: Text(alarm.displayName),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('No'),
+                          ),
+                          FilledButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: Text(
+                              alarm.repeatDays == 0 ? 'End trip' : 'Stop alarm',
                             ),
-                      );
-                      if (confirmed == true) {
-                        try {
-                          await ref.read(alarmProvider).cancel(alarm.id);
-                          if (context.mounted) {
-                            final current = ref.read(alarmProvider);
-                            context.go(
-                              current.hasTriggered
-                                  ? '/triggered'
-                                  : current.active == null
-                                  ? '/'
-                                  : '/active',
-                            );
-                          }
-                        } catch (_) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Could not cancel alarm. Try again.',
-                                ),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true) {
+                      try {
+                        await ref.read(alarmProvider).cancel(alarm.id);
+                        if (context.mounted) {
+                          final current = ref.read(alarmProvider);
+                          context.go(
+                            current.hasTriggered
+                                ? '/triggered'
+                                : current.active == null
+                                ? '/'
+                                : '/active',
+                          );
+                        }
+                      } catch (_) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Could not cancel alarm. Try again.',
                               ),
-                            );
-                          }
+                            ),
+                          );
                         }
                       }
-                    },
+                    }
+                  },
             icon: const Icon(Icons.cancel_outlined),
             label: Text(
               alarm.repeatDays == 0 ? 'End trip' : 'Stop repeating alarm',
@@ -1341,213 +1384,207 @@ class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen> {
     final alarm = currentAlert.alarm;
     final waitingAlerts = ringing.skip(1).toList();
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       body: SafeArea(
         child: LayoutBuilder(
-          builder:
-              (context, constraints) => SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(height: 28),
-                        Icon(
-                          Icons.notifications_active,
-                          size: 96,
-                          color: Theme.of(context).colorScheme.primary,
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 28),
+                    Container(
+                      width: 134,
+                      height: 134,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Theme.of(context).colorScheme.tertiaryContainer,
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.tertiary,
+                          width: 2,
                         ),
-                        const SizedBox(height: 28),
-                        Text(
-                          'ALARM',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          alarm.displayName,
-                          style: Theme.of(context).textTheme.titleLarge,
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(switch (currentAlert.triggerReason) {
-                          'time' => 'The selected time has been reached.',
-                          'both' =>
-                            'The selected time and distance have both been reached.',
-                          _ => 'You have reached the selected distance.',
-                        }, textAlign: TextAlign.center),
-                        if (alarmState.error != null) ...[
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Could not refresh alarm status. Retrying…',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                        if (waitingAlerts.isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            'Next: ${waitingAlerts.first.alarm.displayName}'
-                            '${waitingAlerts.length > 1 ? ' (+${waitingAlerts.length - 1} more)' : ''}',
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                        const SizedBox(height: 28),
-                        FilledButton.icon(
-                          onPressed:
-                              alarmState.busy
-                                  ? null
-                                  : () async {
-                                    try {
-                                      await ref
-                                          .read(alarmProvider)
-                                          .dismissCurrent(alarm.id);
-                                      if (context.mounted) {
-                                        final current = ref.read(alarmProvider);
-                                        context.go(
-                                          current.hasTriggered
-                                              ? '/triggered'
-                                              : current.active == null
-                                              ? '/'
-                                              : '/active',
-                                        );
-                                      }
-                                    } catch (_) {}
-                                  },
-                          icon: const Icon(Icons.stop),
-                          label: const Text('Stop this alert'),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed:
-                              alarmState.busy
-                                  ? null
-                                  : () => showModalBottomSheet<void>(
-                                    context: context,
-                                    builder:
-                                        (sheetContext) => ScrollableSheet(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const ListTile(
-                                                title: Text('Snooze for'),
-                                              ),
-                                              ...[1, 2, 5].map(
-                                                (minutes) => ListTile(
-                                                  title: Text(
-                                                    '$minutes ${minutes == 1 ? 'minute' : 'minutes'}',
-                                                  ),
-                                                  onTap: () async {
-                                                    Navigator.pop(sheetContext);
-                                                    try {
-                                                      await ref
-                                                          .read(alarmProvider)
-                                                          .snooze(
-                                                            minutes,
-                                                            alarm.id,
-                                                          );
-                                                      if (context.mounted) {
-                                                        context.go(
-                                                          ref
-                                                                  .read(
-                                                                    alarmProvider,
-                                                                  )
-                                                                  .hasTriggered
-                                                              ? '/triggered'
-                                                              : '/active',
-                                                        );
-                                                      }
-                                                    } catch (_) {
-                                                      if (context.mounted) {
-                                                        ScaffoldMessenger.of(
-                                                          context,
-                                                        ).showSnackBar(
-                                                          const SnackBar(
-                                                            content: Text(
-                                                              'Could not snooze alarm.',
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }
-                                                    }
-                                                  },
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                  ),
-                          icon: const Icon(Icons.snooze),
-                          label: const Text('Snooze'),
-                        ),
-                        const SizedBox(height: 12),
-                        TextButton.icon(
-                          onPressed:
-                              alarmState.busy
-                                  ? null
-                                  : () async {
-                                    final confirmed = await showDialog<bool>(
-                                      context: context,
-                                      builder:
-                                          (dialogContext) => AlertDialog(
-                                            title: Text(
-                                              alarm.repeatDays == 0
-                                                  ? 'End trip?'
-                                                  : 'Stop repeating alarm?',
-                                            ),
-                                            content: Text(
-                                              alarm.repeatDays == 0
-                                                  ? 'This cancels both the time and distance alerts.'
-                                                  : 'This cancels future repeats and the current alert.',
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed:
-                                                    () => Navigator.pop(
-                                                      dialogContext,
-                                                      false,
-                                                    ),
-                                                child: const Text('Keep trip'),
-                                              ),
-                                              FilledButton(
-                                                onPressed:
-                                                    () => Navigator.pop(
-                                                      dialogContext,
-                                                      true,
-                                                    ),
-                                                child: const Text('End trip'),
-                                              ),
-                                            ],
-                                          ),
-                                    );
-                                    if (confirmed != true) return;
-                                    try {
-                                      await ref
-                                          .read(alarmProvider)
-                                          .stop(alarm.id);
-                                      if (context.mounted) {
-                                        final current = ref.read(alarmProvider);
-                                        context.go(
-                                          current.hasTriggered
-                                              ? '/triggered'
-                                              : current.active == null
-                                              ? '/'
-                                              : '/active',
-                                        );
-                                      }
-                                    } catch (_) {}
-                                  },
-                          icon: const Icon(Icons.cancel_outlined),
-                          label: const Text('End trip'),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+                      ),
+                      child: Icon(
+                        Icons.notifications_active,
+                        size: 74,
+                        color: Theme.of(context).colorScheme.tertiary,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 28),
+                    Text(
+                      'ALARM',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(context).colorScheme.tertiary,
+                            letterSpacing: 2,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      alarm.displayName,
+                      style: Theme.of(context).textTheme.titleLarge,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(switch (currentAlert.triggerReason) {
+                      'time' => 'The selected time has been reached.',
+                      'both' => 'The selected time and distance have both been reached.',
+                      _ => 'You have reached the selected distance.',
+                    }, textAlign: TextAlign.center),
+                    if (alarmState.error != null) ...[
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Could not refresh alarm status. Retrying…',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    if (waitingAlerts.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Next: ${waitingAlerts.first.alarm.displayName}'
+                        '${waitingAlerts.length > 1 ? ' (+${waitingAlerts.length - 1} more)' : ''}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    const SizedBox(height: 28),
+                    FilledButton.icon(
+                      onPressed: alarmState.busy
+                          ? null
+                          : () async {
+                              try {
+                                await ref
+                                    .read(alarmProvider)
+                                    .dismissCurrent(alarm.id);
+                                if (context.mounted) {
+                                  final current = ref.read(alarmProvider);
+                                  context.go(
+                                    current.hasTriggered
+                                        ? '/triggered'
+                                        : current.active == null
+                                        ? '/'
+                                        : '/active',
+                                  );
+                                }
+                              } catch (_) {}
+                            },
+                      icon: const Icon(Icons.stop),
+                      label: const Text('Stop this alert'),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: alarmState.busy
+                          ? null
+                          : () => showModalBottomSheet<void>(
+                              context: context,
+                              builder: (sheetContext) => ScrollableSheet(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const ListTile(title: Text('Snooze for')),
+                                    ...[1, 2, 5].map(
+                                      (minutes) => ListTile(
+                                        title: Text(
+                                          '$minutes ${minutes == 1 ? 'minute' : 'minutes'}',
+                                        ),
+                                        onTap: () async {
+                                          Navigator.pop(sheetContext);
+                                          try {
+                                            await ref
+                                                .read(alarmProvider)
+                                                .snooze(minutes, alarm.id);
+                                            if (context.mounted) {
+                                              context.go(
+                                                ref
+                                                        .read(alarmProvider)
+                                                        .hasTriggered
+                                                    ? '/triggered'
+                                                    : '/active',
+                                              );
+                                            }
+                                          } catch (_) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(
+                                                context,
+                                              ).showSnackBar(
+                                                const SnackBar(
+                                                  content: Text(
+                                                    'Could not snooze alarm.',
+                                                  ),
+                                                ),
+                                              );
+                                            }
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                      icon: const Icon(Icons.snooze),
+                      label: const Text('Snooze'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: alarmState.busy
+                          ? null
+                          : () async {
+                              final confirmed = await showDialog<bool>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  title: Text(
+                                    alarm.repeatDays == 0
+                                        ? 'End trip?'
+                                        : 'Stop repeating alarm?',
+                                  ),
+                                  content: Text(
+                                    alarm.repeatDays == 0
+                                        ? 'This cancels both the time and distance alerts.'
+                                        : 'This cancels future repeats and the current alert.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, false),
+                                      child: const Text('Keep trip'),
+                                    ),
+                                    FilledButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext, true),
+                                      child: const Text('End trip'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed != true) return;
+                              try {
+                                await ref.read(alarmProvider).stop(alarm.id);
+                                if (context.mounted) {
+                                  final current = ref.read(alarmProvider);
+                                  context.go(
+                                    current.hasTriggered
+                                        ? '/triggered'
+                                        : current.active == null
+                                        ? '/'
+                                        : '/active',
+                                  );
+                                }
+                              } catch (_) {}
+                            },
+                      icon: const Icon(Icons.cancel_outlined),
+                      label: const Text('End trip'),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
+            ),
+          ),
         ),
       ),
     );

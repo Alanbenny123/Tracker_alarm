@@ -7,6 +7,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
 import 'package:latlong2/latlong.dart';
 
 import '../../models/place.dart';
+import 'dark_map_style.dart';
 
 class MapView extends StatefulWidget {
   const MapView({
@@ -107,6 +108,9 @@ class _MapViewState extends State<MapView> {
           place.id ?? '${place.latitude},${place.longitude}',
         ),
         position: gm.LatLng(place.latitude, place.longitude),
+        icon: gm.BitmapDescriptor.defaultMarkerWithHue(
+          gm.BitmapDescriptor.hueCyan,
+        ),
         infoWindow: gm.InfoWindow(title: place.name),
         onTap: widget.onPlaceTap == null
             ? null
@@ -124,6 +128,9 @@ class _MapViewState extends State<MapView> {
       gm.Marker(
         markerId: const gm.MarkerId('destination'),
         position: gm.LatLng(destination.latitude, destination.longitude),
+        icon: gm.BitmapDescriptor.defaultMarkerWithHue(
+          gm.BitmapDescriptor.hueOrange,
+        ),
         draggable: widget.onDestinationDrag != null,
         onDragEnd: widget.onDestinationDrag == null
             ? null
@@ -160,6 +167,9 @@ class _MapViewState extends State<MapView> {
                 : 2,
           ),
           mapType: gm.MapType.normal,
+          style: Theme.of(context).brightness == Brightness.dark
+              ? darkMapStyle
+              : null,
           buildingsEnabled: false,
           trafficEnabled: false,
           indoorViewEnabled: false,

@@ -11,6 +11,7 @@ import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
 import '../../widgets/scrollable_sheet.dart';
 import '../../widgets/location_disclosure.dart';
+import '../../widgets/dashboard_panel.dart';
 import '../../services/storage_service.dart';
 import '../map/map_view.dart';
 import '../alarm/alarm_actions.dart';
@@ -200,62 +201,205 @@ class _HomeTab extends ConsumerWidget {
     final activeAlarms = ref.watch(alarmProvider).alarms;
     final saved = ref.watch(placesProvider).places;
     final history = ref.watch(historyProvider).trips;
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text(
-          'Destination Alarm',
-          style: Theme.of(context).textTheme.labelLarge
-              ?.copyWith(color: Theme.of(context).colorScheme.primary),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Where are you going?',
-          style: Theme.of(context).textTheme.headlineMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: () => context.push('/guide'),
-            icon: const Icon(Icons.help_outline),
-            label: const Text('Guide & tutorial'),
-          ),
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'Choose transport',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+        Row(
           children: [
-            for (final mode in TravelMode.values)
-              ActionChip(
-                avatar: Icon(switch (mode) {
-                  TravelMode.bus => Icons.directions_bus,
-                  TravelMode.metro => Icons.subway,
-                  TravelMode.railway => Icons.train,
-                  TravelMode.other => Icons.place_outlined,
-                }),
-                label: Text(mode.label),
-                onPressed: () => context.push('/pick', extra: mode),
+            const Icon(Icons.radar, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Destination Alarm',
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w800),
               ),
+            ),
+            IconButton(
+              tooltip: 'Guide & tutorial',
+              onPressed: () => context.push('/guide'),
+              icon: const Icon(Icons.help_outline),
+            ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 290,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                MapView(position: location.position, interactive: false),
+                IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          scheme.surface.withValues(alpha: 0.82),
+                          Colors.transparent,
+                          scheme.surface.withValues(alpha: 0.95),
+                        ],
+                        stops: const [0, 0.43, 1],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 18,
+                  right: 18,
+                  top: 17,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const DashboardLabel('Explore the map'),
+                      const SizedBox(height: 5),
+                      Text(
+                        'Where are you going?',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 16,
+                  child: DashboardPanel(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                    accent: scheme.primary,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.my_location,
+                          color: scheme.primary,
+                          size: 19,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const DashboardLabel('Current location'),
+                              Text(
+                                location.position == null
+                                    ? 'Finding GPS position…'
+                                    : '${location.position!.latitude.toStringAsFixed(4)}, ${location.position!.longitude.toStringAsFixed(4)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Open map',
+                          onPressed: () => context.push('/pick'),
+                          icon: const Icon(Icons.arrow_outward),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
         TextField(
           readOnly: true,
           onTap: () => context.push('/pick'),
           decoration: const InputDecoration(
             prefixIcon: Icon(Icons.search),
             hintText: 'Search destination',
-            border: OutlineInputBorder(),
+            suffixIcon: Icon(Icons.arrow_forward),
           ),
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 20),
+        const DashboardLabel('Travel mode'),
+        const SizedBox(height: 4),
+        Text('Choose transport', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 96,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: TravelMode.values.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 9),
+            itemBuilder: (context, index) {
+              final mode = TravelMode.values[index];
+              final icon = switch (mode) {
+                TravelMode.bus => Icons.directions_bus,
+                TravelMode.metro => Icons.subway,
+                TravelMode.railway => Icons.train,
+                TravelMode.other => Icons.place_outlined,
+              };
+              return SizedBox(
+                width: 104,
+                child: Material(
+                  color: scheme.surfaceContainerLow,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: BorderSide(color: scheme.outlineVariant),
+                  ),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(18),
+                    onTap: () => context.push('/pick', extra: mode),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Icon(icon, color: scheme.primary),
+                          Text(
+                            mode.label,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(
+              child: _OverviewMetric(
+                label: 'Alarms',
+                value: activeAlarms.length.toString(),
+                icon: Icons.notifications_active_outlined,
+                onTap: () => context.go('/?tab=alarms'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _OverviewMetric(
+                label: 'Saved',
+                value: saved.length.toString(),
+                icon: Icons.bookmark_outline,
+                onTap: () => context.go('/?tab=saved'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _OverviewMetric(
+                label: 'Trips',
+                value: history.length.toString(),
+                icon: Icons.route_outlined,
+                onTap: () => context.go('/?tab=history'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
         if (activeAlarms.isNotEmpty) ...[
           Text(
             'Active alarms (${activeAlarms.length})',
@@ -265,27 +409,6 @@ class _HomeTab extends ConsumerWidget {
           for (final entry in activeAlarms) _ActiveAlarmCard(entry: entry),
           const SizedBox(height: 12),
         ],
-        SizedBox(
-          height: 220,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Stack(
-              children: [
-                MapView(position: location.position, interactive: false),
-                Positioned(
-                  right: 12,
-                  bottom: 12,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () => context.push('/pick'),
-                    icon: const Icon(Icons.map_outlined),
-                    label: const Text('Open map'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
         if (location.error != null)
           _InfoMessage(
             message: location.error!,
@@ -293,17 +416,6 @@ class _HomeTab extends ConsumerWidget {
                 ? 'Enable location'
                 : 'Try again',
             onPressed: () => _refreshLocation(context, ref),
-          )
-        else
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.my_location),
-            title: const Text('Current location'),
-            subtitle: Text(
-              location.position == null
-                  ? 'Finding your location…'
-                  : '${location.position!.latitude.toStringAsFixed(5)}, ${location.position!.longitude.toStringAsFixed(5)}',
-            ),
           ),
         const SizedBox(height: 12),
         FilledButton.icon(
@@ -347,6 +459,47 @@ class _HomeTab extends ConsumerWidget {
                 ),
               ),
       ],
+    );
+  }
+}
+
+class _OverviewMetric extends StatelessWidget {
+  const _OverviewMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DashboardPanel(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: scheme.primary, size: 20),
+              const SizedBox(height: 9),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              Text(label, style: Theme.of(context).textTheme.labelMedium),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -452,49 +605,59 @@ class _ActiveAlarmCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final needsAttention = entry.status != 'paused' &&
+    final needsAttention =
+        entry.status != 'paused' &&
         entry.status != 'triggered' &&
         entry.monitoringHealthy == false;
-    return Card(
-    child: ListTile(
-      leading: Icon(
-        entry.status == 'paused'
-            ? Icons.pause_circle_outline
-            : entry.status == 'snoozed'
-            ? Icons.snooze
-            : needsAttention
-            ? Icons.warning_amber_outlined
-            : Icons.notifications_active,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: DashboardPanel(
+        padding: const EdgeInsets.all(4),
+        accent: needsAttention
+            ? Theme.of(context).colorScheme.error
+            : Theme.of(context).colorScheme.primary,
+        child: ListTile(
+          leading: Icon(
+            entry.status == 'paused'
+                ? Icons.pause_circle_outline
+                : entry.status == 'snoozed'
+                ? Icons.snooze
+                : needsAttention
+                ? Icons.warning_amber_outlined
+                : Icons.notifications_active,
+          ),
+          title: Text(entry.alarm.displayName),
+          isThreeLine: needsAttention && entry.monitoringMessage != null,
+          subtitle: Text(
+            '${formatDistance(entry.alarm.radius)} · '
+            '${entry.alarm.alertAt == null ? 'Distance only' : '${MaterialLocalizations.of(context).formatMediumDate(entry.alarm.alertAt!)} '
+                      '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.alarm.alertAt!))}'} · '
+            '${entry.alarm.repeatDays == 0 ? '' : 'Repeats ${repeatDaysLabel(entry.alarm.repeatDays)} · '}'
+            '${entry.status == 'triggered'
+                ? 'Ringing'
+                : entry.status == 'paused'
+                ? 'Paused'
+                : entry.status == 'snoozed'
+                ? 'Snoozed'
+                : needsAttention
+                ? 'Needs attention'
+                : entry.alarm.repeatDays != 0 && !entry.distanceReady
+                ? 'Scheduled'
+                : 'Monitoring'}'
+            '${needsAttention && entry.monitoringMessage != null ? '\n${entry.monitoringMessage}' : ''}',
+            maxLines: needsAttention ? 3 : 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: AlarmActions(entry: entry),
+          onTap: () {
+            ref.read(alarmProvider).select(entry.alarm.id);
+            context.push(
+              entry.status == 'triggered' ? '/triggered' : '/active',
+            );
+          },
+        ),
       ),
-      title: Text(entry.alarm.displayName),
-      isThreeLine: needsAttention && entry.monitoringMessage != null,
-      subtitle: Text(
-        '${formatDistance(entry.alarm.radius)} · '
-        '${entry.alarm.alertAt == null ? 'Distance only' : '${MaterialLocalizations.of(context).formatMediumDate(entry.alarm.alertAt!)} '
-                  '${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(entry.alarm.alertAt!))}'} · '
-        '${entry.alarm.repeatDays == 0 ? '' : 'Repeats ${repeatDaysLabel(entry.alarm.repeatDays)} · '}'
-        '${entry.status == 'triggered'
-            ? 'Ringing'
-            : entry.status == 'paused'
-            ? 'Paused'
-            : entry.status == 'snoozed'
-            ? 'Snoozed'
-            : needsAttention
-            ? 'Needs attention'
-            : entry.alarm.repeatDays != 0 && !entry.distanceReady
-            ? 'Scheduled'
-            : 'Monitoring'}'
-        '${needsAttention && entry.monitoringMessage != null ? '\n${entry.monitoringMessage}' : ''}',
-        maxLines: needsAttention ? 3 : 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: AlarmActions(entry: entry),
-      onTap: () {
-        ref.read(alarmProvider).select(entry.alarm.id);
-        context.push(entry.status == 'triggered' ? '/triggered' : '/active');
-      },
-    ),
-  );
+    );
   }
 }
 
@@ -525,30 +688,37 @@ class _SavedTab extends ConsumerWidget {
           : places.isEmpty
           ? const Center(child: Text('No saved places yet.'))
           : ListView(
+              padding: const EdgeInsets.all(16),
               children: places
                   .map(
-                    (place) => ListTile(
-                      leading: const Icon(Icons.bookmark),
-                      title: Text(place.name),
-                      subtitle: Text(place.address),
-                      onTap: () => context.push('/setup', extra: place),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: 'Remove',
-                        onPressed: () async {
-                          try {
-                            await saved.remove(place.id!);
-                          } catch (_) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Could not remove this place. Try again.',
-                                ),
-                              ),
-                            );
-                          }
-                        },
+                    (place) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: DashboardPanel(
+                        padding: const EdgeInsets.all(4),
+                        child: ListTile(
+                          leading: const Icon(Icons.bookmark),
+                          title: Text(place.name),
+                          subtitle: Text(place.address),
+                          onTap: () => context.push('/setup', extra: place),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline),
+                            tooltip: 'Remove',
+                            onPressed: () async {
+                              try {
+                                await saved.remove(place.id!);
+                              } catch (_) {
+                                if (!context.mounted) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Could not remove this place. Try again.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   )
@@ -590,20 +760,27 @@ class _HistoryTab extends ConsumerWidget {
           : trips.isEmpty
           ? const Center(child: Text('No trips yet.'))
           : ListView(
+              padding: const EdgeInsets.all(16),
               children: trips
                   .map(
-                    (trip) => ListTile(
-                      leading: Icon(
-                        trip.status == 'completed'
-                            ? Icons.check_circle_outline
-                            : Icons.cancel_outlined,
+                    (trip) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: DashboardPanel(
+                        padding: const EdgeInsets.all(4),
+                        child: ListTile(
+                          leading: Icon(
+                            trip.status == 'completed'
+                                ? Icons.check_circle_outline
+                                : Icons.cancel_outlined,
+                          ),
+                          title: Text(trip.alarm.displayName),
+                          subtitle: Text(
+                            '${trip.endedAt.toLocal().toString().substring(0, 16)} · ${trip.alarm.radius.toInt()} m · ${trip.status}',
+                          ),
+                          onTap: () =>
+                              context.push('/setup', extra: trip.alarm.place),
+                        ),
                       ),
-                      title: Text(trip.alarm.displayName),
-                      subtitle: Text(
-                        '${trip.endedAt.toLocal().toString().substring(0, 16)} · ${trip.alarm.radius.toInt()} m · ${trip.status}',
-                      ),
-                      onTap: () =>
-                          context.push('/setup', extra: trip.alarm.place),
                     ),
                   )
                   .toList(),
@@ -622,13 +799,9 @@ class _SettingsTab extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
-          const ListTile(
-            title: Text(
-              'LOCATION',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+          const DashboardLabel('Location'),
           ListTile(
             leading: const Icon(Icons.location_on_outlined),
             title: const Text('Location permission'),
@@ -651,13 +824,8 @@ class _SettingsTab extends ConsumerWidget {
             ),
             onTap: openAppSettings,
           ),
-          const Divider(),
-          const ListTile(
-            title: Text(
-              'ALARMS',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+          const SizedBox(height: 20),
+          const DashboardLabel('Alarms'),
           const TestAlarmButton(),
           const ListTile(
             title: Text('Starting alert radius'),
@@ -685,19 +853,15 @@ class _SettingsTab extends ConsumerWidget {
             leading: const Icon(Icons.lock_clock_outlined),
             onTap: () => ref.read(geofenceProvider).openFullScreenSettings(),
           ),
-          const Divider(),
-          const ListTile(
-            title: Text('MAP', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
+          const SizedBox(height: 20),
+          const DashboardLabel('Map'),
           const ListTile(
             leading: Icon(Icons.map_outlined),
             title: Text('Map type'),
             subtitle: Text('Google Maps · standard 2D map'),
           ),
-          const Divider(),
-          const ListTile(
-            title: Text('APP', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
+          const SizedBox(height: 20),
+          const DashboardLabel('App'),
           ListTile(
             leading: const Icon(Icons.menu_book_outlined),
             title: const Text('Guide & tutorial'),
@@ -732,12 +896,10 @@ class _SettingsTab extends ConsumerWidget {
               ),
             ),
           ),
-          const Divider(),
+          const SizedBox(height: 20),
+          const DashboardLabel('Local data'),
           const ListTile(
-            title: Text(
-              'LOCAL DATA',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            title: Text('Stored on this phone'),
             subtitle: Text(
               'The latest ${StorageService.historyLimit} trips are kept on this phone. Android cloud backup and device transfer are disabled.',
             ),

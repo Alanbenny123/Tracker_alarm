@@ -8,6 +8,7 @@ import '../../models/place.dart';
 import '../../models/shared_place_search_args.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
+import '../../widgets/dashboard_panel.dart';
 import '../../services/places_service.dart';
 import '../../services/transit_stops_service.dart';
 import 'map_view.dart';
@@ -341,12 +342,24 @@ class _DestinationPickerScreenState
                   right: 12,
                   top: 12,
                   child: Material(
-                    color: Theme.of(context).colorScheme.surface,
-                    elevation: 3,
-                    borderRadius: BorderRadius.circular(16),
+                    color: Theme.of(context).colorScheme.surfaceContainerLow,
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: BorderSide(
+                        color: Theme.of(context).colorScheme.outlineVariant,
+                      ),
+                    ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: DashboardLabel('Find a destination'),
+                          ),
+                        ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                           child: SingleChildScrollView(
@@ -480,8 +493,7 @@ class _DestinationPickerScreenState
                     left: 12,
                     right: 12,
                     bottom: 12,
-                    child: Card(
-                      elevation: 3,
+                    child: DashboardPanel(
                       child: SizedBox(
                         height: 245,
                         child: Column(
@@ -569,58 +581,55 @@ class _DestinationPickerScreenState
                     left: 12,
                     right: 12,
                     bottom: 12,
-                    child: Card(
-                      elevation: 3,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Destination',
-                              style: Theme.of(context).textTheme.labelLarge,
-                            ),
-                            Text(
-                              selected!.name,
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            Text(
-                              selected!.address,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${selected!.latitude.toStringAsFixed(6)}, ${selected!.longitude.toStringAsFixed(6)}',
-                            ),
-                            const SizedBox(height: 12),
-                            FilledButton(
-                              onPressed: () {
-                                final selection = AlarmSetupArgs(
-                                  place: selected!,
-                                  mode: mode,
-                                );
-                                if (widget.returnSelection) {
-                                  context.pop(selection);
-                                } else {
-                                  context.push('/setup', extra: selection);
-                                }
-                              },
-                              child: const Text('Confirm destination'),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              sharedResultSelected
-                                  ? 'Found from the shared place. Check the pin before confirming. You can drag it to adjust the location.'
-                                  : mode.usesStops
-                                  ? 'Tap another stop on the map, or tap the map to search another area.'
-                                  : 'Tap the map or drag the pin to move it.',
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
+                    child: DashboardPanel(
+                      accent: Theme.of(context).colorScheme.primary,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Destination',
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                          Text(
+                            selected!.name,
+                            style: Theme.of(context).textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            selected!.address,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${selected!.latitude.toStringAsFixed(6)}, ${selected!.longitude.toStringAsFixed(6)}',
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton(
+                            onPressed: () {
+                              final selection = AlarmSetupArgs(
+                                place: selected!,
+                                mode: mode,
+                              );
+                              if (widget.returnSelection) {
+                                context.pop(selection);
+                              } else {
+                                context.push('/setup', extra: selection);
+                              }
+                            },
+                            child: const Text('Confirm destination'),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            sharedResultSelected
+                                ? 'Found from the shared place. Check the pin before confirming. You can drag it to adjust the location.'
+                                : mode.usesStops
+                                ? 'Tap another stop on the map, or tap the map to search another area.'
+                                : 'Tap the map or drag the pin to move it.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
                       ),
                     ),
                   ),
