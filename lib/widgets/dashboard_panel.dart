@@ -17,10 +17,12 @@ class DashboardPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surfaceContainerLow,
+      color: scheme.surfaceContainerLow.withValues(
+        alpha: Theme.of(context).brightness == Brightness.dark ? 0.92 : 0.97,
+      ),
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         side: BorderSide(
           color: (accent ?? scheme.outlineVariant).withValues(
             alpha: accent == null ? 0.7 : 0.55,

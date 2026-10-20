@@ -109,7 +109,7 @@ class _MapViewState extends State<MapView> {
         ),
         position: gm.LatLng(place.latitude, place.longitude),
         icon: gm.BitmapDescriptor.defaultMarkerWithHue(
-          gm.BitmapDescriptor.hueOrange,
+          gm.BitmapDescriptor.hueGreen,
         ),
         infoWindow: gm.InfoWindow(title: place.name),
         onTap: widget.onPlaceTap == null
@@ -121,7 +121,7 @@ class _MapViewState extends State<MapView> {
         markerId: const gm.MarkerId('current-location'),
         position: gm.LatLng(position.latitude, position.longitude),
         icon: gm.BitmapDescriptor.defaultMarkerWithHue(
-          gm.BitmapDescriptor.hueYellow,
+          gm.BitmapDescriptor.hueAzure,
         ),
       ),
     if (widget.destination case final destination?)
@@ -129,7 +129,7 @@ class _MapViewState extends State<MapView> {
         markerId: const gm.MarkerId('destination'),
         position: gm.LatLng(destination.latitude, destination.longitude),
         icon: gm.BitmapDescriptor.defaultMarkerWithHue(
-          gm.BitmapDescriptor.hueRed,
+          gm.BitmapDescriptor.hueYellow,
         ),
         draggable: widget.onDestinationDrag != null,
         onDragEnd: widget.onDestinationDrag == null

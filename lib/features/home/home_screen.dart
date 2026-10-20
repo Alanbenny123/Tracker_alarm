@@ -201,243 +201,257 @@ class _HomeTab extends ConsumerWidget {
     final activeAlarms = ref.watch(alarmProvider).alarms;
     final history = ref.watch(historyProvider).trips;
     final scheme = Theme.of(context).colorScheme;
-    return ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.radar, size: 22),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Destination Alarm',
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w800),
-              ),
-            ),
-            IconButton(
-              tooltip: 'Guide & tutorial',
-              onPressed: () => context.push('/guide'),
-              icon: const Icon(Icons.help_outline),
-            ),
-          ],
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [scheme.surface, scheme.surfaceContainerLow, scheme.surface],
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 290,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                MapView(position: location.position, interactive: false),
-                IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          scheme.surface.withValues(alpha: 0.82),
-                          Colors.transparent,
-                          scheme.surface.withValues(alpha: 0.95),
-                        ],
-                        stops: const [0, 0.43, 1],
+      ),
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.radar, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Destination Alarm',
+                  style: Theme.of(context).textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Guide & tutorial',
+                onPressed: () => context.push('/guide'),
+                icon: const Icon(Icons.help_outline),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 290,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(26),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  MapView(position: location.position, interactive: false),
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            scheme.surface.withValues(alpha: 0.82),
+                            Colors.transparent,
+                            scheme.surface.withValues(alpha: 0.95),
+                          ],
+                          stops: const [0, 0.43, 1],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 18,
-                  right: 18,
-                  top: 17,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const DashboardLabel('Explore the map'),
-                      const SizedBox(height: 5),
-                      Text(
-                        'Where are you going?',
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800),
-                      ),
-                    ],
-                  ),
-                ),
-                Positioned(
-                  left: 16,
-                  right: 16,
-                  bottom: 16,
-                  child: DashboardPanel(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-                    accent: scheme.primary,
-                    child: Row(
+                  Positioned(
+                    left: 18,
+                    right: 18,
+                    top: 17,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.my_location,
-                          color: scheme.primary,
-                          size: 19,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const DashboardLabel('Current location'),
-                              Text(
-                                location.position == null
-                                    ? 'Finding GPS position…'
-                                    : '${location.position!.latitude.toStringAsFixed(4)}, ${location.position!.longitude.toStringAsFixed(4)}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton.filledTonal(
-                          tooltip: 'Open map',
-                          onPressed: () => context.push('/pick'),
-                          icon: const Icon(Icons.arrow_outward),
+                        const DashboardLabel('Explore the map'),
+                        const SizedBox(height: 5),
+                        Text(
+                          'Where are you going?',
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.w800),
                         ),
                       ],
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-        TextField(
-          readOnly: true,
-          onTap: () => context.push('/pick'),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'Search destination',
-            suffixIcon: Icon(Icons.arrow_forward),
-          ),
-        ),
-        const SizedBox(height: 20),
-        DashboardLabel('Travel mode', color: scheme.tertiary),
-        const SizedBox(height: 4),
-        Text('Choose transport', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 96,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: TravelMode.values.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 9),
-            itemBuilder: (context, index) {
-              final mode = TravelMode.values[index];
-              final icon = switch (mode) {
-                TravelMode.bus => Icons.directions_bus,
-                TravelMode.metro => Icons.subway,
-                TravelMode.railway => Icons.train,
-                TravelMode.other => Icons.place_outlined,
-              };
-              final modeColor = switch (mode) {
-                TravelMode.bus => scheme.secondary,
-                TravelMode.metro => scheme.primary,
-                TravelMode.railway => scheme.tertiary,
-                TravelMode.other => scheme.primary,
-              };
-              return SizedBox(
-                width: 104,
-                child: Material(
-                  color: scheme.surfaceContainerLow,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18),
-                    side: BorderSide(color: scheme.outlineVariant),
-                  ),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(18),
-                    onTap: () => context.push('/pick', extra: mode),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 16,
+                    child: DashboardPanel(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+                      accent: scheme.primary,
+                      child: Row(
                         children: [
-                          Icon(icon, color: modeColor),
-                          Text(
-                            mode.label,
-                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          Icon(
+                            Icons.my_location,
+                            color: scheme.primary,
+                            size: 19,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const DashboardLabel('Current location'),
+                                Text(
+                                  location.position == null
+                                      ? 'Finding GPS position…'
+                                      : '${location.position!.latitude.toStringAsFixed(4)}, ${location.position!.longitude.toStringAsFixed(4)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton.filledTonal(
+                            tooltip: 'Open map',
+                            onPressed: () => context.push('/pick'),
+                            icon: const Icon(Icons.arrow_outward),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ),
-              );
-            },
+                ],
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: _OverviewMetric(
-                label: 'Alarms',
-                value: activeAlarms.length.toString(),
-                icon: Icons.notifications_active_outlined,
-                accent: scheme.secondary,
-                onTap: () => context.go('/?tab=alarms'),
-              ),
+          const SizedBox(height: 14),
+          TextField(
+            readOnly: true,
+            onTap: () => context.push('/pick'),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Search destination',
+              suffixIcon: Icon(Icons.arrow_forward),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _OverviewMetric(
-                label: 'Trips',
-                value: history.length.toString(),
-                icon: Icons.route_outlined,
-                accent: scheme.tertiary,
-                onTap: () => context.go('/?tab=history'),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        if (activeAlarms.isNotEmpty) ...[
+          ),
+          const SizedBox(height: 20),
+          DashboardLabel('Travel mode', color: scheme.tertiary),
+          const SizedBox(height: 4),
           Text(
-            'Active alarms (${activeAlarms.length})',
-            style: Theme.of(context).textTheme.titleMedium,
+            'Choose transport',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 8),
-          for (final entry in activeAlarms) _ActiveAlarmCard(entry: entry),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 96,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: TravelMode.values.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 9),
+              itemBuilder: (context, index) {
+                final mode = TravelMode.values[index];
+                final icon = switch (mode) {
+                  TravelMode.bus => Icons.directions_bus,
+                  TravelMode.metro => Icons.subway,
+                  TravelMode.railway => Icons.train,
+                  TravelMode.other => Icons.place_outlined,
+                };
+                final modeColor = switch (mode) {
+                  TravelMode.bus => scheme.secondary,
+                  TravelMode.metro => scheme.primary,
+                  TravelMode.railway => scheme.tertiary,
+                  TravelMode.other => scheme.primary,
+                };
+                return SizedBox(
+                  width: 104,
+                  child: Material(
+                    color: scheme.surfaceContainerLow,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(22),
+                      side: BorderSide(color: scheme.outlineVariant),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(22),
+                      onTap: () => context.push('/pick', extra: mode),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Icon(icon, color: modeColor),
+                            Text(
+                              mode.label,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: _OverviewMetric(
+                  label: 'Alarms',
+                  value: activeAlarms.length.toString(),
+                  icon: Icons.notifications_active_outlined,
+                  accent: scheme.secondary,
+                  onTap: () => context.go('/?tab=alarms'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _OverviewMetric(
+                  label: 'Trips',
+                  value: history.length.toString(),
+                  icon: Icons.route_outlined,
+                  accent: scheme.tertiary,
+                  onTap: () => context.go('/?tab=history'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          if (activeAlarms.isNotEmpty) ...[
+            Text(
+              'Active alarms (${activeAlarms.length})',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            for (final entry in activeAlarms) _ActiveAlarmCard(entry: entry),
+            const SizedBox(height: 12),
+          ],
+          if (location.error != null)
+            _InfoMessage(
+              message: location.error!,
+              action: location.error!.contains('permission')
+                  ? 'Enable location'
+                  : 'Try again',
+              onPressed: () => _refreshLocation(context, ref),
+            ),
           const SizedBox(height: 12),
-        ],
-        if (location.error != null)
-          _InfoMessage(
-            message: location.error!,
-            action: location.error!.contains('permission')
-                ? 'Enable location'
-                : 'Try again',
-            onPressed: () => _refreshLocation(context, ref),
+          FilledButton.icon(
+            onPressed: () => context.push('/pick'),
+            icon: const Icon(Icons.add_location_alt_outlined),
+            label: const Text('Set destination'),
           ),
-        const SizedBox(height: 12),
-        FilledButton.icon(
-          onPressed: () => context.push('/pick'),
-          icon: const Icon(Icons.add_location_alt_outlined),
-          label: const Text('Set destination'),
-        ),
-        const SizedBox(height: 24),
-        const _SectionTitle('Recent trips'),
-        if (history.isEmpty)
-          const Text('Your completed and cancelled alarms appear here.')
-        else
-          ...history
-              .take(3)
-              .map(
-                (trip) => ListTile(
-                  leading: const Icon(Icons.place_outlined),
-                  title: Text(trip.alarm.displayName),
-                  subtitle: Text(
-                    '${trip.status} · ${trip.endedAt.toLocal().toString().substring(0, 16)}',
+          const SizedBox(height: 24),
+          const _SectionTitle('Recent trips'),
+          if (history.isEmpty)
+            const Text('Your completed and cancelled alarms appear here.')
+          else
+            ...history
+                .take(3)
+                .map(
+                  (trip) => ListTile(
+                    leading: const Icon(Icons.place_outlined),
+                    title: Text(trip.alarm.displayName),
+                    subtitle: Text(
+                      '${trip.status} · ${trip.endedAt.toLocal().toString().substring(0, 16)}',
+                    ),
                   ),
                 ),
-              ),
-      ],
+        ],
+      ),
     );
   }
 }

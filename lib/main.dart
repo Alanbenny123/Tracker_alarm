@@ -273,55 +273,55 @@ ThemeData createAppTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme =
       ColorScheme.fromSeed(
-        seedColor: const Color(0xFFFF7836),
+        seedColor: const Color(0xFFBED2A5),
         brightness: brightness,
       ).copyWith(
-        primary: dark ? const Color(0xFFFF7836) : const Color(0xFFA44120),
-        onPrimary: dark ? const Color(0xFF2B0F04) : Colors.white,
+        primary: dark ? const Color(0xFFC7D9A8) : const Color(0xFF315A3C),
+        onPrimary: dark ? const Color(0xFF193024) : Colors.white,
         primaryContainer: dark
-            ? const Color(0xFF5B2316)
-            : const Color(0xFFFFD8C4),
+            ? const Color(0xFF385842)
+            : const Color(0xFFD5E8C8),
         onPrimaryContainer: dark
-            ? const Color(0xFFFFD3B5)
-            : const Color(0xFF5B1F0E),
-        secondary: dark ? const Color(0xFFE76A50) : const Color(0xFFAC432D),
-        onSecondary: dark ? const Color(0xFF310E09) : Colors.white,
+            ? const Color(0xFFE3F1CA)
+            : const Color(0xFF183E25),
+        secondary: dark ? const Color(0xFF99BF9D) : const Color(0xFF4C7557),
+        onSecondary: dark ? const Color(0xFF173021) : Colors.white,
         secondaryContainer: dark
-            ? const Color(0xFF521B18)
-            : const Color(0xFFFFDAD3),
+            ? const Color(0xFF2D4A3A)
+            : const Color(0xFFD8EADB),
         onSecondaryContainer: dark
-            ? const Color(0xFFFFC8BA)
-            : const Color(0xFF611C14),
-        tertiary: dark ? const Color(0xFFFFD16A) : const Color(0xFF885300),
-        onTertiary: dark ? const Color(0xFF332000) : Colors.white,
+            ? const Color(0xFFD1E9D2)
+            : const Color(0xFF274630),
+        tertiary: dark ? const Color(0xFFE2DDB2) : const Color(0xFF6D7544),
+        onTertiary: dark ? const Color(0xFF302F15) : Colors.white,
         tertiaryContainer: dark
-            ? const Color(0xFF51350F)
-            : const Color(0xFFFFE3AC),
+            ? const Color(0xFF48513A)
+            : const Color(0xFFE9EBC6),
         onTertiaryContainer: dark
-            ? const Color(0xFFFFE3A1)
-            : const Color(0xFF4A2C00),
+            ? const Color(0xFFF3EFCC)
+            : const Color(0xFF3F4825),
         error: dark ? const Color(0xFFFF8494) : const Color(0xFFB83E55),
         onError: dark ? const Color(0xFF530815) : Colors.white,
-        surface: dark ? const Color(0xFF090606) : const Color(0xFFFFF8F3),
-        onSurface: dark ? const Color(0xFFF8EEE6) : const Color(0xFF2C1C16),
-        surfaceContainerLowest: dark ? const Color(0xFF050404) : Colors.white,
-        surfaceContainerLow: dark ? const Color(0xFF17100E) : Colors.white,
+        surface: dark ? const Color(0xFF10251E) : const Color(0xFFF5F8F0),
+        onSurface: dark ? const Color(0xFFF1F5E9) : const Color(0xFF1B3023),
+        surfaceContainerLowest: dark ? const Color(0xFF0B1A15) : Colors.white,
+        surfaceContainerLow: dark ? const Color(0xFF1B352B) : Colors.white,
         surfaceContainer: dark
-            ? const Color(0xFF211713)
-            : const Color(0xFFF8EBE3),
+            ? const Color(0xFF244135)
+            : const Color(0xFFEAF0E4),
         surfaceContainerHigh: dark
-            ? const Color(0xFF2D1D17)
-            : const Color(0xFFF0DCCF),
+            ? const Color(0xFF2B4C3D)
+            : const Color(0xFFDEE8D6),
         surfaceContainerHighest: dark
-            ? const Color(0xFF3C2920)
-            : const Color(0xFFE8CDBD),
+            ? const Color(0xFF365847)
+            : const Color(0xFFD1E0C8),
         onSurfaceVariant: dark
-            ? const Color(0xFFD1B9A7)
-            : const Color(0xFF705349),
-        outline: dark ? const Color(0xFFA3745B) : const Color(0xFF956A58),
+            ? const Color(0xFFC4D4BE)
+            : const Color(0xFF4F6454),
+        outline: dark ? const Color(0xFF82A58B) : const Color(0xFF718D75),
         outlineVariant: dark
-            ? const Color(0xFF58382B)
-            : const Color(0xFFDDC0AF),
+            ? const Color(0xFF456953)
+            : const Color(0xFFB9CEB8),
       );
   return ThemeData(
     useMaterial3: true,
@@ -346,7 +346,7 @@ ThemeData createAppTheme(Brightness brightness) {
       elevation: 0,
       color: scheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.55)),
       ),
     ),
@@ -358,13 +358,13 @@ ThemeData createAppTheme(Brightness brightness) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: scheme.surfaceContainerLow,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         borderSide: BorderSide(color: scheme.outlineVariant),
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         borderSide: BorderSide(color: scheme.primary, width: 1.5),
       ),
     ),
@@ -372,7 +372,7 @@ ThemeData createAppTheme(Brightness brightness) {
       backgroundColor: scheme.surfaceContainer,
       selectedColor: scheme.primaryContainer,
       side: BorderSide(color: scheme.outlineVariant),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       labelStyle: TextStyle(color: scheme.onSurface),
     ),
     dividerTheme: DividerThemeData(color: scheme.outlineVariant),
@@ -384,7 +384,7 @@ ThemeData createAppTheme(Brightness brightness) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, 54),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
     ),
   );
