@@ -22,6 +22,7 @@ class MapView extends StatefulWidget {
     this.onDestinationDrag,
     this.onCameraMove,
     this.interactive = true,
+    this.compactPlaceholder = false,
   });
   final Position? position;
   final Place? destination;
@@ -33,6 +34,7 @@ class MapView extends StatefulWidget {
   final void Function(LatLng)? onDestinationDrag;
   final ValueChanged<LatLng>? onCameraMove;
   final bool interactive;
+  final bool compactPlaceholder;
 
   @override
   State<MapView> createState() => _MapViewState();
@@ -146,9 +148,24 @@ class _MapViewState extends State<MapView> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            configured == null ? 'Loading map…' : 'Google Maps is not configured. Add GOOGLE_MAPS_API_KEY to android/local.properties.',
-            textAlign: TextAlign.center,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (configured == false)
+                Icon(
+                  Icons.map_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              const SizedBox(height: 8),
+              Text(
+                configured == null
+                    ? 'Loading map…'
+                    : widget.compactPlaceholder
+                    ? 'Map setup needed'
+                    : 'Map setup needed. Add GOOGLE_MAPS_API_KEY to android/local.properties, then reinstall the app.',
+                textAlign: TextAlign.center,
+              ),
+            ],
           ),
         ),
       );

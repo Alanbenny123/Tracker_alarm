@@ -242,7 +242,11 @@ class _HomeTab extends ConsumerWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  MapView(position: location.position, interactive: false),
+                  MapView(
+                    position: location.position,
+                    interactive: false,
+                    compactPlaceholder: true,
+                  ),
                   IgnorePointer(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -338,58 +342,25 @@ class _HomeTab extends ConsumerWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: 96,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: TravelMode.values.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 9),
-              itemBuilder: (context, index) {
-                final mode = TravelMode.values[index];
-                final icon = switch (mode) {
-                  TravelMode.bus => Icons.directions_bus,
-                  TravelMode.metro => Icons.subway,
-                  TravelMode.railway => Icons.train,
-                  TravelMode.other => Icons.place_outlined,
-                };
-                final modeColor = switch (mode) {
-                  TravelMode.bus => scheme.secondary,
-                  TravelMode.metro => scheme.primary,
-                  TravelMode.railway => scheme.tertiary,
-                  TravelMode.other => scheme.primary,
-                };
-                return SizedBox(
-                  width: 104,
-                  child: Material(
-                    color: scheme.surfaceContainerLow,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(22),
-                      side: BorderSide(color: scheme.outlineVariant),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 9.0;
+              final columns = constraints.maxWidth >= 560 ? 4 : 2;
+              final cardWidth =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final mode in TravelMode.values)
+                    SizedBox(
+                      width: cardWidth,
+                      height: 110,
+                      child: _TransportCard(mode: mode),
                     ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(22),
-                      onTap: () => context.push('/pick', extra: mode),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Icon(icon, color: modeColor),
-                            Text(
-                              mode.label,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
           Row(
@@ -456,6 +427,56 @@ class _HomeTab extends ConsumerWidget {
                   ),
                 ),
         ],
+      ),
+    );
+  }
+}
+
+class _TransportCard extends StatelessWidget {
+  const _TransportCard({required this.mode});
+
+  final TravelMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final icon = switch (mode) {
+      TravelMode.bus => Icons.directions_bus,
+      TravelMode.metro => Icons.subway,
+      TravelMode.railway => Icons.train,
+      TravelMode.other => Icons.place_outlined,
+    };
+    final modeColor = switch (mode) {
+      TravelMode.bus => scheme.secondary,
+      TravelMode.metro => scheme.primary,
+      TravelMode.railway => scheme.tertiary,
+      TravelMode.other => scheme.primary,
+    };
+    return Material(
+      color: scheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: () => context.push('/pick', extra: mode),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: modeColor),
+              Text(
+                mode.label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
