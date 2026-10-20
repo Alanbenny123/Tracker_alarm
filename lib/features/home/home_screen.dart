@@ -204,9 +204,13 @@ class _HomeTab extends ConsumerWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [scheme.surface, scheme.surfaceContainerLow, scheme.surface],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: [
+            scheme.surfaceContainerHigh,
+            scheme.surface,
+            scheme.surfaceContainerLow,
+          ],
         ),
       ),
       child: ListView(
@@ -279,6 +283,7 @@ class _HomeTab extends ConsumerWidget {
                     child: DashboardPanel(
                       padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
                       accent: scheme.primary,
+                      glassOpacity: 0.58,
                       child: Row(
                         children: [
                           Icon(
