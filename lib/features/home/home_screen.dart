@@ -345,7 +345,11 @@ class _HomeTab extends ConsumerWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               const gap = 9.0;
-              final columns = constraints.maxWidth >= 560 ? 4 : 2;
+              final columns = constraints.maxWidth >= 560
+                  ? 4
+                  : constraints.maxWidth >= 320
+                  ? 3
+                  : 2;
               final cardWidth =
                   (constraints.maxWidth - gap * (columns - 1)) / columns;
               return Wrap(

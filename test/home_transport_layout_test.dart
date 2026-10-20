@@ -13,7 +13,7 @@ class _VisibleLocation extends FakeLocation {
 }
 
 void main() {
-  testWidgets('transport choices fit a narrow phone with larger text', (
+  testWidgets('three transport choices fit a phone row with larger text', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(360, 800);
@@ -46,6 +46,15 @@ void main() {
     );
     await tester.pump();
     expect(find.text('Railway'), findsOneWidget);
+    final bus = tester.getTopLeft(find.text('Bus'));
+    final metro = tester.getTopLeft(find.text('Metro'));
+    final railway = tester.getTopLeft(find.text('Railway'));
+    final other = tester.getTopLeft(find.text('Other'));
+    expect(bus.dx, lessThan(metro.dx));
+    expect(metro.dx, lessThan(railway.dx));
+    expect((bus.dy - metro.dy).abs(), lessThan(50));
+    expect((metro.dy - railway.dy).abs(), lessThan(50));
+    expect(other.dy, greaterThan(railway.dy));
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
