@@ -318,7 +318,7 @@ class _HomeTab extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 20),
-        const DashboardLabel('Travel mode'),
+        DashboardLabel('Travel mode', color: scheme.tertiary),
         const SizedBox(height: 4),
         Text('Choose transport', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 10),
@@ -335,6 +335,12 @@ class _HomeTab extends ConsumerWidget {
                 TravelMode.metro => Icons.subway,
                 TravelMode.railway => Icons.train,
                 TravelMode.other => Icons.place_outlined,
+              };
+              final modeColor = switch (mode) {
+                TravelMode.bus => scheme.secondary,
+                TravelMode.metro => scheme.primary,
+                TravelMode.railway => scheme.tertiary,
+                TravelMode.other => scheme.primary,
               };
               return SizedBox(
                 width: 104,
@@ -353,7 +359,7 @@ class _HomeTab extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Icon(icon, color: scheme.primary),
+                          Icon(icon, color: modeColor),
                           Text(
                             mode.label,
                             style: const TextStyle(fontWeight: FontWeight.w700),
@@ -375,6 +381,7 @@ class _HomeTab extends ConsumerWidget {
                 label: 'Alarms',
                 value: activeAlarms.length.toString(),
                 icon: Icons.notifications_active_outlined,
+                accent: scheme.secondary,
                 onTap: () => context.go('/?tab=alarms'),
               ),
             ),
@@ -384,6 +391,7 @@ class _HomeTab extends ConsumerWidget {
                 label: 'Trips',
                 value: history.length.toString(),
                 icon: Icons.route_outlined,
+                accent: scheme.tertiary,
                 onTap: () => context.go('/?tab=history'),
               ),
             ),
@@ -439,19 +447,21 @@ class _OverviewMetric extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    required this.accent,
     required this.onTap,
   });
 
   final String label;
   final String value;
   final IconData icon;
+  final Color accent;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return DashboardPanel(
       padding: EdgeInsets.zero,
+      accent: accent,
       child: InkWell(
         onTap: onTap,
         child: Padding(
@@ -459,7 +469,7 @@ class _OverviewMetric extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(icon, color: scheme.primary, size: 20),
+              Icon(icon, color: accent, size: 20),
               const SizedBox(height: 9),
               Text(
                 value,

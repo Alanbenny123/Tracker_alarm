@@ -273,55 +273,55 @@ ThemeData createAppTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme =
       ColorScheme.fromSeed(
-        seedColor: const Color(0xFFFF7A18),
+        seedColor: const Color(0xFFFF7836),
         brightness: brightness,
       ).copyWith(
-        primary: dark ? const Color(0xFFFF861C) : const Color(0xFFA64B00),
-        onPrimary: dark ? const Color(0xFF251000) : Colors.white,
+        primary: dark ? const Color(0xFFFF7836) : const Color(0xFFA44120),
+        onPrimary: dark ? const Color(0xFF2B0F04) : Colors.white,
         primaryContainer: dark
-            ? const Color(0xFF542609)
-            : const Color(0xFFFFDBC1),
+            ? const Color(0xFF5B2316)
+            : const Color(0xFFFFD8C4),
         onPrimaryContainer: dark
-            ? const Color(0xFFFFCFA7)
-            : const Color(0xFF552200),
-        secondary: dark ? const Color(0xFFEAB18A) : const Color(0xFF815336),
-        onSecondary: dark ? const Color(0xFF3B1D0A) : Colors.white,
+            ? const Color(0xFFFFD3B5)
+            : const Color(0xFF5B1F0E),
+        secondary: dark ? const Color(0xFFE76A50) : const Color(0xFFAC432D),
+        onSecondary: dark ? const Color(0xFF310E09) : Colors.white,
         secondaryContainer: dark
-            ? const Color(0xFF3E271B)
-            : const Color(0xFFFFDCC6),
+            ? const Color(0xFF521B18)
+            : const Color(0xFFFFDAD3),
         onSecondaryContainer: dark
-            ? const Color(0xFFF5D2BA)
-            : const Color(0xFF4A2813),
-        tertiary: dark ? const Color(0xFFFFBD66) : const Color(0xFF945313),
-        onTertiary: dark ? const Color(0xFF402000) : Colors.white,
+            ? const Color(0xFFFFC8BA)
+            : const Color(0xFF611C14),
+        tertiary: dark ? const Color(0xFFFFD16A) : const Color(0xFF885300),
+        onTertiary: dark ? const Color(0xFF332000) : Colors.white,
         tertiaryContainer: dark
-            ? const Color(0xFF54300F)
-            : const Color(0xFFFFDEB9),
+            ? const Color(0xFF51350F)
+            : const Color(0xFFFFE3AC),
         onTertiaryContainer: dark
-            ? const Color(0xFFFFDCB0)
-            : const Color(0xFF512900),
+            ? const Color(0xFFFFE3A1)
+            : const Color(0xFF4A2C00),
         error: dark ? const Color(0xFFFF8494) : const Color(0xFFB83E55),
         onError: dark ? const Color(0xFF530815) : Colors.white,
-        surface: dark ? const Color(0xFF0B0B0D) : const Color(0xFFFBF7F3),
-        onSurface: dark ? const Color(0xFFF5F0EC) : const Color(0xFF292019),
-        surfaceContainerLowest: dark ? const Color(0xFF080809) : Colors.white,
-        surfaceContainerLow: dark ? const Color(0xFF171719) : Colors.white,
+        surface: dark ? const Color(0xFF090606) : const Color(0xFFFFF8F3),
+        onSurface: dark ? const Color(0xFFF8EEE6) : const Color(0xFF2C1C16),
+        surfaceContainerLowest: dark ? const Color(0xFF050404) : Colors.white,
+        surfaceContainerLow: dark ? const Color(0xFF17100E) : Colors.white,
         surfaceContainer: dark
-            ? const Color(0xFF1E1B1A)
-            : const Color(0xFFF5ECE4),
+            ? const Color(0xFF211713)
+            : const Color(0xFFF8EBE3),
         surfaceContainerHigh: dark
-            ? const Color(0xFF292422)
-            : const Color(0xFFEEE0D5),
+            ? const Color(0xFF2D1D17)
+            : const Color(0xFFF0DCCF),
         surfaceContainerHighest: dark
-            ? const Color(0xFF352D29)
-            : const Color(0xFFE6D1BF),
+            ? const Color(0xFF3C2920)
+            : const Color(0xFFE8CDBD),
         onSurfaceVariant: dark
-            ? const Color(0xFFC6B7AD)
-            : const Color(0xFF69564B),
-        outline: dark ? const Color(0xFF987D6D) : const Color(0xFF8D7161),
+            ? const Color(0xFFD1B9A7)
+            : const Color(0xFF705349),
+        outline: dark ? const Color(0xFFA3745B) : const Color(0xFF956A58),
         outlineVariant: dark
-            ? const Color(0xFF44332A)
-            : const Color(0xFFD8C3B3),
+            ? const Color(0xFF58382B)
+            : const Color(0xFFDDC0AF),
       );
   return ThemeData(
     useMaterial3: true,
