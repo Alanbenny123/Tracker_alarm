@@ -199,7 +199,6 @@ class _HomeTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final location = ref.watch(locationProvider);
     final activeAlarms = ref.watch(alarmProvider).alarms;
-    final saved = ref.watch(placesProvider).places;
     final history = ref.watch(historyProvider).trips;
     final scheme = Theme.of(context).colorScheme;
     return ListView(
@@ -382,15 +381,6 @@ class _HomeTab extends ConsumerWidget {
             const SizedBox(width: 8),
             Expanded(
               child: _OverviewMetric(
-                label: 'Saved',
-                value: saved.length.toString(),
-                icon: Icons.bookmark_outline,
-                onTap: () => context.go('/?tab=saved'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _OverviewMetric(
                 label: 'Trips',
                 value: history.length.toString(),
                 icon: Icons.route_outlined,
@@ -424,25 +414,6 @@ class _HomeTab extends ConsumerWidget {
           label: const Text('Set destination'),
         ),
         const SizedBox(height: 24),
-        _SectionTitle('Saved places', onTap: () => context.push('/pick')),
-        if (saved.isEmpty)
-          const Text('Save a place from the destination setup screen.')
-        else
-          ...saved
-              .take(3)
-              .map(
-                (place) => ListTile(
-                  leading: const Icon(Icons.bookmark_outline),
-                  title: Text(place.name),
-                  subtitle: Text(
-                    place.address,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  onTap: () => context.push('/setup', extra: place),
-                ),
-              ),
-        const SizedBox(height: 20),
         const _SectionTitle('Recent trips'),
         if (history.isEmpty)
           const Text('Your completed and cancelled alarms appear here.')
@@ -505,22 +476,13 @@ class _OverviewMetric extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.title, {this.onTap});
+  const _SectionTitle(this.title);
   final String title;
-  final VoidCallback? onTap;
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: Text(
-          title,
-          style: Theme.of(context).textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.bold),
-        ),
-      ),
-      if (onTap != null)
-        TextButton(onPressed: onTap, child: const Text('See all')),
-    ],
+  Widget build(BuildContext context) => Text(
+    title,
+    style: Theme.of(context).textTheme.titleLarge
+        ?.copyWith(fontWeight: FontWeight.bold),
   );
 }
 

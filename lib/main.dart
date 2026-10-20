@@ -42,50 +42,42 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
     routes: [
       GoRoute(
         path: '/',
-        builder:
-            (context, state) => HomeScreen(
-              initialIndex: switch (state.uri.queryParameters['tab']) {
-                'alarms' => 1,
-                'saved' => 2,
-                'history' => 3,
-                'settings' => 4,
-                _ => 0,
-              },
-            ),
+        builder: (context, state) => HomeScreen(
+          initialIndex: switch (state.uri.queryParameters['tab']) {
+            'alarms' => 1,
+            'saved' => 2,
+            'history' => 3,
+            'settings' => 4,
+            _ => 0,
+          },
+        ),
       ),
       GoRoute(path: '/guide', builder: (context, state) => const GuideScreen()),
       GoRoute(
         path: '/pick',
-        builder:
-            (context, state) => DestinationPickerScreen(
-              key: ObjectKey(state.extra),
-              initialQuery:
-                  state.extra is SharedPlaceSearchArgs
-                      ? (state.extra as SharedPlaceSearchArgs).query
-                      : state.extra is String
-                      ? state.extra as String
-                      : null,
-              sharedPlace: state.extra is SharedPlaceSearchArgs,
-              initialMode:
-                  state.extra is TravelMode
-                      ? state.extra as TravelMode
-                      : state.extra is DestinationReselectArgs
-                      ? (state.extra as DestinationReselectArgs).mode
-                      : null,
-              returnSelection: state.extra is DestinationReselectArgs,
-            ),
+        builder: (context, state) => DestinationPickerScreen(
+          key: ObjectKey(state.extra),
+          initialQuery: state.extra is SharedPlaceSearchArgs
+              ? (state.extra as SharedPlaceSearchArgs).query
+              : state.extra is String
+              ? state.extra as String
+              : null,
+          sharedPlace: state.extra is SharedPlaceSearchArgs,
+          initialMode: state.extra is TravelMode
+              ? state.extra as TravelMode
+              : state.extra is DestinationReselectArgs
+              ? (state.extra as DestinationReselectArgs).mode
+              : null,
+          returnSelection: state.extra is DestinationReselectArgs,
+        ),
       ),
       GoRoute(
         path: '/setup',
         builder: (context, state) {
           final extra = state.extra!;
-          final args =
-              extra is AlarmSetupArgs
-                  ? extra
-                  : AlarmSetupArgs(
-                    place: extra as Place,
-                    mode: TravelMode.other,
-                  );
+          final args = extra is AlarmSetupArgs
+              ? extra
+              : AlarmSetupArgs(place: extra as Place, mode: TravelMode.other);
           return AlarmSetupScreen(
             key: ObjectKey(state.extra),
             place: args.place,
@@ -229,49 +221,48 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
           ThemeModeSetting.dark => ThemeMode.dark,
           _ => ThemeMode.system,
         },
-        builder:
-            (context, child) => Stack(
-              children: [
-                child ?? const SizedBox.shrink(),
-                if (_resolvingSharedLocation) ...[
-                  const ModalBarrier(dismissible: false, color: Colors.black54),
-                  Center(
-                    child: Card(
-                      margin: const EdgeInsets.all(24),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Semantics(
-                          liveRegion: true,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const CircularProgressIndicator(
-                                semanticsLabel: 'Opening shared location',
-                              ),
-                              const SizedBox(height: 20),
-                              const Text(
-                                'Opening Google Maps location…',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 8),
-                              const Text(
-                                'Resolving the shared link. This can take up to 12 seconds.',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 12),
-                              TextButton(
-                                onPressed: _cancelSharedLocation,
-                                child: const Text('Cancel'),
-                              ),
-                            ],
+        builder: (context, child) => Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            if (_resolvingSharedLocation) ...[
+              const ModalBarrier(dismissible: false, color: Colors.black54),
+              Center(
+                child: Card(
+                  margin: const EdgeInsets.all(24),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Semantics(
+                      liveRegion: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CircularProgressIndicator(
+                            semanticsLabel: 'Opening shared location',
                           ),
-                        ),
+                          const SizedBox(height: 20),
+                          const Text(
+                            'Opening Google Maps location…',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Resolving the shared link. This can take up to 12 seconds.',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          TextButton(
+                            onPressed: _cancelSharedLocation,
+                            child: const Text('Cancel'),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ],
-            ),
+                ),
+              ),
+            ],
+          ],
+        ),
         routerConfig: router,
       ),
     );
@@ -282,55 +273,55 @@ ThemeData createAppTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme =
       ColorScheme.fromSeed(
-        seedColor: const Color(0xFF2BC9C5),
+        seedColor: const Color(0xFFFF7A18),
         brightness: brightness,
       ).copyWith(
-        primary: dark ? const Color(0xFF4DD9D4) : const Color(0xFF006D70),
-        onPrimary: dark ? const Color(0xFF002F31) : Colors.white,
+        primary: dark ? const Color(0xFFFF861C) : const Color(0xFFA64B00),
+        onPrimary: dark ? const Color(0xFF251000) : Colors.white,
         primaryContainer: dark
-            ? const Color(0xFF124448)
-            : const Color(0xFFD4F3F0),
+            ? const Color(0xFF542609)
+            : const Color(0xFFFFDBC1),
         onPrimaryContainer: dark
-            ? const Color(0xFFA9F2EE)
-            : const Color(0xFF09383A),
-        secondary: dark ? const Color(0xFF8CC7D1) : const Color(0xFF3C7180),
-        onSecondary: dark ? const Color(0xFF00343B) : Colors.white,
+            ? const Color(0xFFFFCFA7)
+            : const Color(0xFF552200),
+        secondary: dark ? const Color(0xFFEAB18A) : const Color(0xFF815336),
+        onSecondary: dark ? const Color(0xFF3B1D0A) : Colors.white,
         secondaryContainer: dark
-            ? const Color(0xFF234D57)
-            : const Color(0xFFD7EAF0),
+            ? const Color(0xFF3E271B)
+            : const Color(0xFFFFDCC6),
         onSecondaryContainer: dark
-            ? const Color(0xFFD2EDF1)
-            : const Color(0xFF173D47),
-        tertiary: dark ? const Color(0xFFF1A365) : const Color(0xFF9A552A),
-        onTertiary: dark ? const Color(0xFF4A2509) : Colors.white,
+            ? const Color(0xFFF5D2BA)
+            : const Color(0xFF4A2813),
+        tertiary: dark ? const Color(0xFFFFBD66) : const Color(0xFF945313),
+        onTertiary: dark ? const Color(0xFF402000) : Colors.white,
         tertiaryContainer: dark
-            ? const Color(0xFF603816)
-            : const Color(0xFFFFE1C9),
+            ? const Color(0xFF54300F)
+            : const Color(0xFFFFDEB9),
         onTertiaryContainer: dark
-            ? const Color(0xFFFFDFC5)
-            : const Color(0xFF51290F),
+            ? const Color(0xFFFFDCB0)
+            : const Color(0xFF512900),
         error: dark ? const Color(0xFFFF8494) : const Color(0xFFB83E55),
         onError: dark ? const Color(0xFF530815) : Colors.white,
-        surface: dark ? const Color(0xFF11191D) : const Color(0xFFF3F8F7),
-        onSurface: dark ? const Color(0xFFE6F0EF) : const Color(0xFF17282A),
-        surfaceContainerLowest: dark ? const Color(0xFF0D1519) : Colors.white,
-        surfaceContainerLow: dark ? const Color(0xFF19252A) : Colors.white,
+        surface: dark ? const Color(0xFF0B0B0D) : const Color(0xFFFBF7F3),
+        onSurface: dark ? const Color(0xFFF5F0EC) : const Color(0xFF292019),
+        surfaceContainerLowest: dark ? const Color(0xFF080809) : Colors.white,
+        surfaceContainerLow: dark ? const Color(0xFF171719) : Colors.white,
         surfaceContainer: dark
-            ? const Color(0xFF202D32)
-            : const Color(0xFFE8F1F0),
+            ? const Color(0xFF1E1B1A)
+            : const Color(0xFFF5ECE4),
         surfaceContainerHigh: dark
-            ? const Color(0xFF29383E)
-            : const Color(0xFFDDEAE8),
+            ? const Color(0xFF292422)
+            : const Color(0xFFEEE0D5),
         surfaceContainerHighest: dark
-            ? const Color(0xFF33454B)
-            : const Color(0xFFD0E1DF),
+            ? const Color(0xFF352D29)
+            : const Color(0xFFE6D1BF),
         onSurfaceVariant: dark
-            ? const Color(0xFFACC3C4)
-            : const Color(0xFF4D6467),
-        outline: dark ? const Color(0xFF85A1A3) : const Color(0xFF6D898C),
+            ? const Color(0xFFC6B7AD)
+            : const Color(0xFF69564B),
+        outline: dark ? const Color(0xFF987D6D) : const Color(0xFF8D7161),
         outlineVariant: dark
-            ? const Color(0xFF3D575C)
-            : const Color(0xFFC2D7D5),
+            ? const Color(0xFF44332A)
+            : const Color(0xFFD8C3B3),
       );
   return ThemeData(
     useMaterial3: true,
