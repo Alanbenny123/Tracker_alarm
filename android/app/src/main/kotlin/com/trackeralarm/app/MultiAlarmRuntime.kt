@@ -54,6 +54,7 @@ object MultiAlarmRuntime {
         var monitoringSince: Long = startedAt,
         var endedAt: Long = 0L,
         val sourceExpiresAt: Long = 0L,
+        val locationRedacted: Boolean = false,
     ) {
         fun live() = status == "active" || status == "triggered" || status == "snoozed"
         val displayName: String get() = label.ifBlank { name }
@@ -76,6 +77,7 @@ object MultiAlarmRuntime {
             "triggerReason" to triggerReason, "triggeredAt" to triggeredAt,
             "endedAt" to endedAt,
             "sourceExpiresAt" to sourceExpiresAt,
+            "locationRedacted" to locationRedacted,
             "repeatDays" to repeatDays, "leadMinutes" to leadMinutes,
             "distanceReady" to distanceReady(System.currentTimeMillis()),
         ).also { if (alertAt > 0L) it["alertAt"] = alertAt }
@@ -101,6 +103,7 @@ object MultiAlarmRuntime {
             put("monitoringSince", monitoringSince)
             put("endedAt", endedAt)
             put("sourceExpiresAt", sourceExpiresAt)
+            put("locationRedacted", locationRedacted)
         }
 
         companion object {
@@ -131,6 +134,9 @@ object MultiAlarmRuntime {
                 monitoringSince = json.optLong("monitoringSince", json.optLong("startedAt", 0L)),
                 endedAt = json.optLong("endedAt", 0L),
                 sourceExpiresAt = sourceExpiresAt,
+                locationRedacted = json.optBoolean("locationRedacted",
+                    json.optString("name") == "Google destination · reselect" &&
+                        json.optDouble("latitude") == 0.0 && json.optDouble("longitude") == 0.0),
             )
                 // Older entries have no source marker. Keep live alarms for at most
                 // 30 days from creation; finished entries no longer need coordinates.
@@ -623,11 +629,15 @@ object MultiAlarmRuntime {
         if (changed && write(context, entries)) {
             expiredIds.forEach { removeGeofence(context, it) }
             if (expiredIds.isNotEmpty()) {
+                val open = PendingIntent.getActivity(context, 203,
+                    Intent(context, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 AlarmNotifications.notifications(context).notify(203,
                     builder(context, AlarmNotifications.CHANNEL_TRACKING)
                         .setSmallIcon(android.R.drawable.ic_dialog_alert)
                         .setContentTitle("Destination needs reselection")
                         .setContentText("A saved Google location expired. Open the app to choose it again.")
+                        .setContentIntent(open)
                         .setAutoCancel(true).build())
             }
             if (refreshService) refresh(context)
@@ -637,7 +647,8 @@ object MultiAlarmRuntime {
 
     private fun Entry.withoutGoogleCoordinates() = copy(
         latitude = 0.0, longitude = 0.0, address = "",
-        name = "Google destination · reselect", sourceExpiresAt = 0L)
+        name = "Google destination · reselect", sourceExpiresAt = 0L,
+        locationRedacted = true)
 
     @Synchronized fun checkLocation(context: Context, location: Location): Long {
         checkDue(context)

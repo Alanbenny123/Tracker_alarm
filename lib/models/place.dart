@@ -7,6 +7,7 @@ class Place {
     this.id,
     this.googleFetchedAt,
     this.sourceTracked = true,
+    this.coordinatesAvailable = true,
   });
 
   final String? id;
@@ -16,6 +17,11 @@ class Place {
 
   /// False only for records saved before coordinate provenance was recorded.
   final bool sourceTracked;
+
+  /// False when Android has removed stored coordinates from a finished alarm.
+  final bool coordinatesAvailable;
+  bool requiresReselectionAt(DateTime now) =>
+      !sourceTracked || !coordinatesAvailable || expiredAt(now);
   bool expiredAt(DateTime now) =>
       googleFetchedAt != null &&
       !now.isBefore(googleFetchedAt!.add(const Duration(days: 30)));
@@ -33,6 +39,7 @@ class Place {
     id: id ?? this.id,
     googleFetchedAt: googleFetchedAt ?? this.googleFetchedAt,
     sourceTracked: sourceTracked,
+    coordinatesAvailable: coordinatesAvailable,
     name: name ?? this.name,
     address: address ?? this.address,
     latitude: latitude,
@@ -42,6 +49,7 @@ class Place {
   Map<String, dynamic> toJson() => {
     'id': id,
     'googleFetchedAt': googleFetchedAt?.toIso8601String(),
+    'coordinatesAvailable': coordinatesAvailable,
     'name': name,
     'address': address,
     'latitude': latitude,
@@ -65,6 +73,7 @@ class Place {
           ? null
           : DateTime.parse(json['googleFetchedAt'] as String),
       sourceTracked: json.containsKey('googleFetchedAt'),
+      coordinatesAvailable: json['coordinatesAvailable'] != false,
       name: json['name'] as String? ?? 'Selected location',
       address: json['address'] as String? ?? '',
       latitude: latitude,

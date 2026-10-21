@@ -328,7 +328,12 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
   Widget build(BuildContext context) {
     final position = ref.watch(locationProvider).position;
     final alarm = ref.watch(alarmProvider);
-    final distance = distanceTo(position, selectedPlace);
+    final destinationNeedsReselection = selectedPlace.requiresReselectionAt(
+      DateTime.now(),
+    );
+    final distance = destinationNeedsReselection
+        ? null
+        : distanceTo(position, selectedPlace);
     final eta = distance != null && position != null && position.speed > 1
         ? Duration(seconds: (distance / position.speed).round())
         : null;
@@ -359,11 +364,17 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
             height: 230,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: MapView(
-                position: position,
-                destination: selectedPlace,
-                radius: radius,
-              ),
+              child: destinationNeedsReselection
+                  ? const Center(
+                      child: Text(
+                        'Reselect this destination to see it on the map.',
+                      ),
+                    )
+                  : MapView(
+                      position: position,
+                      destination: selectedPlace,
+                      radius: radius,
+                    ),
             ),
           ),
           const SizedBox(height: 12),
@@ -388,9 +399,15 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                 ),
                 const SizedBox(height: 4),
                 Text(selectedPlace.address),
+                if (destinationNeedsReselection)
+                  const Text(
+                    'This saved location is no longer available. Reselect the destination before starting an alarm.',
+                  ),
                 const SizedBox(height: 12),
                 Text(
-                  distance == null
+                  destinationNeedsReselection
+                      ? 'Destination needs reselection'
+                      : distance == null
                       ? 'Finding straight-line distance…'
                       : '${formatDistance(distance)} away in a straight line',
                   style: Theme.of(context).textTheme.titleMedium,
@@ -412,7 +429,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       label: const Text('Reselect destination'),
                     ),
                     TextButton.icon(
-                      onPressed: saved
+                      onPressed: saved || destinationNeedsReselection
                           ? null
                           : () async {
                               final name = await _askName(
@@ -791,6 +808,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
           FilledButton.icon(
             onPressed:
                 alarm.busy ||
+                    destinationNeedsReselection ||
                     (alarm.alarms.length >= 10 && !widget.editing) ||
                     radiusError != null ||
                     checkingRequirements ||
@@ -854,6 +872,8 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
             label: Text(
               alarm.busy
                   ? (widget.editing ? 'Saving…' : 'Starting…')
+                  : destinationNeedsReselection
+                  ? 'Reselect destination to continue'
                   : (alarm.alarms.length >= 10 && !widget.editing)
                   ? 'Maximum 10 alarms active'
                   : requirements?.ready == true ||

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tracker_alarm/features/home/home_screen.dart';
 import 'package:tracker_alarm/main.dart';
 import 'package:tracker_alarm/models/destination_alarm.dart';
+import 'package:tracker_alarm/models/place.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
 
 import 'helpers/alarm_fakes.dart';
@@ -17,6 +18,67 @@ class _QuietLocation extends FakeLocation {
 }
 
 void main() {
+  testWidgets('redacted history cannot reopen coordinates at zero', (
+    tester,
+  ) async {
+    final store = RawMemoryStorage();
+    await store.setHistory([
+      TripRecord(
+        alarm: DestinationAlarm(
+          id: 'old-google',
+          place: const Place(
+            name: 'Google destination · reselect',
+            address: '',
+            latitude: 0,
+            longitude: 0,
+            coordinatesAvailable: false,
+          ),
+          radius: 500,
+          vibration: true,
+          sound: 'Bell',
+          startedAt: DateTime(2026, 10, 16),
+        ),
+        endedAt: DateTime(2026, 10, 16, 12),
+        status: 'completed',
+      ),
+    ]);
+    final history = HistoryController(store);
+    await history.load();
+    final location = _QuietLocation();
+    final alarms = AlarmController(store, FakeNative(), location, history);
+    await alarms.restore();
+    final router = GoRouter(
+      routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, _) => const HomeScreen(initialIndex: 3),
+        ),
+      ],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          storageProvider.overrideWith((ref) => store),
+          historyProvider.overrideWith((ref) => history),
+          alarmProvider.overrideWith((ref) => alarms),
+          locationServiceProvider.overrideWithValue(location),
+        ],
+        child: MaterialApp.router(
+          theme: createAppTheme(Brightness.light),
+          routerConfig: router,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Destination needs reselection'),
+      findsOneWidget,
+    );
+    expect(tester.widget<ListTile>(find.byType(ListTile).last).onTap, isNull);
+    await tester.pumpWidget(const SizedBox());
+    router.dispose();
+  });
+
   testWidgets(
     'history deletion requires confirmation and keeps active alarms and saved places',
     (tester) async {

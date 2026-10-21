@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tracker_alarm/models/place.dart';
 import 'package:tracker_alarm/models/repeat_schedule.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
 import 'package:tracker_alarm/services/geofence_service.dart';
@@ -7,6 +8,36 @@ import 'package:tracker_alarm/services/location_service.dart';
 import 'helpers/alarm_fakes.dart';
 
 void main() {
+  test('expired or redacted destinations cannot start an alarm', () async {
+    final storage = MemoryStorage();
+    final native = FakeNative();
+    final controller = AlarmController(
+      storage,
+      native,
+      FakeLocation(),
+      HistoryController(storage),
+    );
+    final expired = stationA.copyWith(
+      googleFetchedAt: DateTime.now().subtract(const Duration(days: 31)),
+    );
+    final redacted = Place(
+      name: 'Previous destination',
+      address: '',
+      latitude: 0,
+      longitude: 0,
+      coordinatesAvailable: false,
+    );
+    await expectLater(
+      controller.start(expired, 500, true, 'Bell'),
+      throwsStateError,
+    );
+    await expectLater(
+      controller.start(redacted, 500, true, 'Bell'),
+      throwsStateError,
+    );
+    expect(native.states, isEmpty);
+  });
+
   test(
     'native monitoring failures and GPS health reach the alarm UI state',
     () async {
@@ -278,16 +309,15 @@ void main() {
 
   test('required settings are checked before GPS is queried', () async {
     final storage = MemoryStorage();
-    final native =
-        FakeNative()
-          ..requirementsState = const AlarmRequirements(
-            preciseLocation: true,
-            backgroundLocation: true,
-            notifications: true,
-            exactAlarms: true,
-            fullScreenAlarms: true,
-            batteryOptimizationOff: false,
-          );
+    final native = FakeNative()
+      ..requirementsState = const AlarmRequirements(
+        preciseLocation: true,
+        backgroundLocation: true,
+        notifications: true,
+        exactAlarms: true,
+        fullScreenAlarms: true,
+        batteryOptimizationOff: false,
+      );
     final location = NeverCalledLocation();
     final controller = AlarmController(
       storage,

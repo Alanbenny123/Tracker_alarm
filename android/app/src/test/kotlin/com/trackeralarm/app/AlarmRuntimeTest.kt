@@ -562,6 +562,10 @@ class AlarmRuntimeTest {
         assertEquals(0.0, expired["latitude"])
         assertEquals(0.0, expired["longitude"])
         assertEquals(0L, expired["sourceExpiresAt"])
+        assertEquals(true, expired["locationRedacted"])
+        val expiryNotice = AlarmNotifications.notifications(app).activeNotifications
+            .firstOrNull { it.id == 203 }?.notification
+        assertNotNull(expiryNotice?.contentIntent)
         assertTrue(states.any { it["id"] == "current" && it["status"] == "active" })
     }
 
@@ -601,6 +605,7 @@ class AlarmRuntimeTest {
         assertEquals(0.0, finished["latitude"])
         assertEquals(0.0, finished["longitude"])
         assertEquals(0L, finished["sourceExpiresAt"])
+        assertEquals(true, finished["locationRedacted"])
     }
 
     @Test fun testAlarmIsIsolatedAndStopsAutomaticallyWithWakeLockCleanup() {

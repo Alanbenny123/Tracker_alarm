@@ -791,10 +791,18 @@ class _HistoryTab extends ConsumerWidget {
                           ),
                           title: Text(trip.alarm.displayName),
                           subtitle: Text(
-                            '${trip.endedAt.toLocal().toString().substring(0, 16)} · ${trip.alarm.radius.toInt()} m · ${trip.status}',
+                            '${trip.endedAt.toLocal().toString().substring(0, 16)} · ${trip.alarm.radius.toInt()} m · ${trip.status}'
+                            '${trip.alarm.place.requiresReselectionAt(DateTime.now()) ? ' · Destination needs reselection' : ''}',
                           ),
-                          onTap: () =>
-                              context.push('/setup', extra: trip.alarm.place),
+                          onTap:
+                              trip.alarm.place.requiresReselectionAt(
+                                DateTime.now(),
+                              )
+                              ? null
+                              : () => context.push(
+                                  '/setup',
+                                  extra: trip.alarm.place,
+                                ),
                         ),
                       ),
                     ),

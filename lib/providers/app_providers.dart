@@ -352,6 +352,14 @@ class AlarmProgress {
 class AlarmController extends ChangeNotifier {
   AlarmController(this._storage, this._geofence, this._location, this._history);
 
+  static void _validateDestination(Place place) {
+    if (place.requiresReselectionAt(DateTime.now())) {
+      throw StateError(
+        'This destination needs reselection before an alarm can start.',
+      );
+    }
+  }
+
   final StorageService _storage;
   final GeofenceService _geofence;
   final LocationService _location;
@@ -432,6 +440,7 @@ class AlarmController extends ChangeNotifier {
         id: state['id'] as String,
         label: state['label'] as String? ?? '',
         place: Place(
+          coordinatesAvailable: state['locationRedacted'] != true,
           name: state['name'] as String,
           address: state['address'] as String? ?? '',
           latitude: (state['latitude'] as num).toDouble(),
@@ -636,6 +645,7 @@ class AlarmController extends ChangeNotifier {
     notifyListeners();
     var registered = false;
     try {
+      _validateDestination(place);
       final requirements = await _geofence.requirements();
       if (!requirements.ready) {
         throw LocationException(requirements.missingMessage);
@@ -733,6 +743,7 @@ class AlarmController extends ChangeNotifier {
     int days,
     String label,
   ) => _manage(() async {
+    _validateDestination(place);
     final latest = await _geofence.multiStates();
     await _applyNativeStates(latest);
     final current = _entries.where((entry) => entry.alarm.id == id).firstOrNull;
