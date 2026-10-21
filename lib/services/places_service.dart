@@ -97,7 +97,12 @@ class PlacesService {
         response = await request();
       }
       final places = (response ?? [])
-          .map((item) => Place.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map(
+            (item) => Place.fromJson({
+              ...Map<String, dynamic>.from(item as Map),
+              'googleFetchedAt': _now().toIso8601String(),
+            }),
+          )
           .toList();
       return places;
     } on PlatformException catch (e) {

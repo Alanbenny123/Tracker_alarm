@@ -52,6 +52,8 @@ object MultiAlarmRuntime {
         val label: String = "",
         var paused: Boolean = false,
         var monitoringSince: Long = startedAt,
+        var endedAt: Long = 0L,
+        val sourceExpiresAt: Long = 0L,
     ) {
         fun live() = status == "active" || status == "triggered" || status == "snoozed"
         val displayName: String get() = label.ifBlank { name }
@@ -72,6 +74,8 @@ object MultiAlarmRuntime {
             "vibration" to vibration, "sound" to sound, "startedAt" to startedAt,
             "status" to (if (paused && live()) "paused" else status), "timeFired" to timeFired, "distanceFired" to distanceFired,
             "triggerReason" to triggerReason, "triggeredAt" to triggeredAt,
+            "endedAt" to endedAt,
+            "sourceExpiresAt" to sourceExpiresAt,
             "repeatDays" to repeatDays, "leadMinutes" to leadMinutes,
             "distanceReady" to distanceReady(System.currentTimeMillis()),
         ).also { if (alertAt > 0L) it["alertAt"] = alertAt }
@@ -95,6 +99,8 @@ object MultiAlarmRuntime {
             put("cycleDate", cycleDate)
             put("hasTime", hasTime); put("label", label); put("paused", paused)
             put("monitoringSince", monitoringSince)
+            put("endedAt", endedAt)
+            put("sourceExpiresAt", sourceExpiresAt)
         }
 
         companion object {
@@ -118,6 +124,8 @@ object MultiAlarmRuntime {
                 hasTime = json.optBoolean("hasTime", json.optLong("alertAt", 0L) > 0L),
                 label = json.optString("label", ""), paused = json.optBoolean("paused", false),
                 monitoringSince = json.optLong("monitoringSince", json.optLong("startedAt", 0L)),
+                endedAt = json.optLong("endedAt", 0L),
+                sourceExpiresAt = json.optLong("sourceExpiresAt", 0L),
             )
         }
     }
@@ -136,6 +144,7 @@ object MultiAlarmRuntime {
                     entry.radius.isFinite() && entry.radius in 100f..2000f &&
                     entry.status in listOf("active", "triggered", "snoozed", "completed", "cancelled") &&
                     entry.startedAt > 0L && entry.alertAt >= 0L && entry.snoozedUntil >= 0L &&
+                    entry.sourceExpiresAt >= 0L &&
                     entry.targetMinute in 0..1439 && ids.add(entry.id))
                 entries.add(entry)
             } catch (_: Exception) { damaged = true }
@@ -305,12 +314,14 @@ object MultiAlarmRuntime {
         val leadMinutes = (args["leadMinutes"] as? Number)?.toInt() ?: 0
         val alertAt = (args["alertAt"] as? Number)?.toLong() ?: 0L
         val repeatStartAt = (args["repeatStartDay"] as? Number)?.toLong() ?: 0L
+        val sourceExpiresAt = (args["sourceExpiresAt"] as? Number)?.toLong() ?: 0L
         val targetAt = if (alertAt > 0L) alertAt + leadMinutes * 60_000L else repeatStartAt
         val targetCalendar = Calendar.getInstance().apply { timeInMillis = targetAt }
         val targetWeekday = (targetCalendar.get(Calendar.DAY_OF_WEEK) + 5) % 7
         if (label.length > 80 || id.isNullOrBlank() || name.isNullOrBlank() || lat == null || lon == null ||
             !lat.isFinite() || !lon.isFinite() || lat !in -90.0..90.0 || lon !in -180.0..180.0 ||
             radius == null || !radius.isFinite() || radius !in 100f..2000f ||
+            (sourceExpiresAt != 0L && sourceExpiresAt <= System.currentTimeMillis()) ||
             repeatDays !in 0..127 || leadMinutes !in listOf(0, 5, 15, 30, 60) ||
             (repeatDays != 0 && (targetAt <= 0L ||
                 dayStart(targetAt) < dayStart(System.currentTimeMillis()) ||
@@ -333,7 +344,7 @@ object MultiAlarmRuntime {
             targetMinute = targetCalendar.get(Calendar.HOUR_OF_DAY) * 60 + targetCalendar.get(Calendar.MINUTE),
             cycleDay = if (repeatDays == 0) 0L else dayStart(targetAt),
             cycleDate = if (repeatDays == 0) 0 else dateNumber(targetCalendar),
-            hasTime = alertAt > 0L, label = label)
+            hasTime = alertAt > 0L, label = label, sourceExpiresAt = sourceExpiresAt)
         entries.add(entry)
         if (!write(context, entries)) { result.error("storage", "Could not save alarm", null); return }
         try { refresh(context, strict = true) } catch (e: Exception) {
@@ -347,9 +358,13 @@ object MultiAlarmRuntime {
 
     @Synchronized fun finish(context: Context, id: String, status: String) {
         val entries = read(context)
-        val entry = entries.firstOrNull { it.id == id && it.live() } ?: return
+        val index = entries.indexOfFirst { it.id == id && it.live() }
+        if (index < 0) return
+        val entry = entries[index]
         entry.status = status
+        entry.endedAt = System.currentTimeMillis()
         entry.snoozedUntil = 0L
+        if (entry.sourceExpiresAt > 0L) entries[index] = entry.withoutGoogleCoordinates()
         if (write(context, entries)) {
             removeGeofence(context, id)
             refresh(context)
@@ -444,16 +459,19 @@ object MultiAlarmRuntime {
         val lon = (args["longitude"] as? Number)?.toDouble()
         val radius = (args["radius"] as? Number)?.toFloat()
         val days = (args["repeatDays"] as? Number)?.toInt()
+        val sourceExpiresAt = (args["sourceExpiresAt"] as? Number)?.toLong() ?: 0L
         val label = (args["label"] as? String ?: "").trim()
         val name = args["name"] as? String
         if (name.isNullOrBlank() || lat == null || lon == null || !lat.isFinite() || !lon.isFinite() ||
             lat !in -90.0..90.0 || lon !in -180.0..180.0 || radius == null ||
-            !radius.isFinite() || radius !in 100f..2000f || days == null || days !in 0..127 || label.length > 80) {
+            !radius.isFinite() || radius !in 100f..2000f || days == null || days !in 0..127 || label.length > 80 ||
+            (sourceExpiresAt != 0L && sourceExpiresAt <= System.currentTimeMillis())) {
             result.error("arguments", "Invalid alarm settings", null); return
         }
         val destinationChanged = lat != old.latitude || lon != old.longitude || radius != old.radius
         val changed = old.copy(name = name, address = args["address"] as? String ?: "",
             latitude = lat, longitude = lon, radius = radius,
+            sourceExpiresAt = sourceExpiresAt,
             vibration = args["vibration"] as? Boolean ?: old.vibration,
             sound = args["sound"] as? String ?: old.sound, label = label)
         if (destinationChanged) {
@@ -512,11 +530,23 @@ object MultiAlarmRuntime {
 
     @Synchronized fun dismiss(context: Context, id: String) {
         val entries = read(context)
-        val entry = entries.firstOrNull { it.id == id && it.status == "triggered" } ?: return
+        val index = entries.indexOfFirst { it.id == id && it.status == "triggered" }
+        if (index < 0) return
+        val entry = entries[index]
         val finished = entry.distanceFired && (entry.alertAt <= 0L || entry.timeFired)
+        val completedCycle = if (finished && entry.repeatDays != 0)
+            entry.copy(id = "${entry.id}:cycle:${entry.cycleDate}", status = "completed",
+                repeatDays = 0, endedAt = System.currentTimeMillis()).let {
+                    if (it.sourceExpiresAt > 0L) it.withoutGoogleCoordinates() else it
+                } else null
         entry.status = if (finished && entry.repeatDays == 0) "completed" else "active"
+        if (entry.status == "completed") entry.endedAt = System.currentTimeMillis()
         entry.triggeredAt = 0L
         advanceCycle(entry, System.currentTimeMillis(), force = finished)
+        if (entry.status == "completed" && entry.sourceExpiresAt > 0L)
+            entries[index] = entry.withoutGoogleCoordinates()
+        if (completedCycle != null && entries.none { it.id == completedCycle.id })
+            entries.add(completedCycle)
         if (write(context, entries)) {
             refresh(context)
             if (entry.repeatDays != 0 && !entry.distanceFired &&
@@ -538,6 +568,17 @@ object MultiAlarmRuntime {
         val entries = read(context)
         val now = System.currentTimeMillis()
         var changed = false
+        val expiredIds = mutableListOf<String>()
+        for (index in entries.indices) {
+            val entry = entries[index]
+            if (entry.live() && entry.sourceExpiresAt > 0L && now >= entry.sourceExpiresAt) {
+                expiredIds.add(entry.id)
+                // Never retain Places-derived coordinates beyond their allowed lifetime.
+                entries[index] = entry.withoutGoogleCoordinates().copy(
+                    status = "cancelled", paused = false, endedAt = now)
+                changed = true
+            }
+        }
         val advanced = mutableListOf<Entry>()
         entries.filter { it.monitoring() }.forEach { entry ->
             if (advanceCycle(entry, now)) {
@@ -569,10 +610,23 @@ object MultiAlarmRuntime {
             if (!alreadyRinging && entry.status == "triggered") entry.triggeredAt = triggerTime++
         }
         if (changed && write(context, entries)) {
+            expiredIds.forEach { removeGeofence(context, it) }
+            if (expiredIds.isNotEmpty()) {
+                AlarmNotifications.notifications(context).notify(203,
+                    builder(context, AlarmNotifications.CHANNEL_TRACKING)
+                        .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                        .setContentTitle("Destination needs reselection")
+                        .setContentText("A saved Google location expired. Open the app to choose it again.")
+                        .setAutoCancel(true).build())
+            }
             if (refreshService) refresh(context)
             advanced.filter { it.distanceReady(now) }.forEach { addGeofence(context, it) }
         } else scheduleNext(context, entries)
     }
+
+    private fun Entry.withoutGoogleCoordinates() = copy(
+        latitude = 0.0, longitude = 0.0, address = "",
+        name = "Google destination · reselect", sourceExpiresAt = 0L)
 
     @Synchronized fun checkLocation(context: Context, location: Location): Long {
         checkDue(context)
@@ -682,7 +736,8 @@ object MultiAlarmRuntime {
                 if (entry.status == "snoozed") entry.snoozedUntil else 0L,
                 if (entry.repeatDays != 0 && entry.status == "active") nextCycleStart(entry) else 0L,
                 if (entry.repeatDays != 0 && entry.status == "active" &&
-                    entry.cycleDay > System.currentTimeMillis()) entry.cycleDay else 0L)
+                    entry.cycleDay > System.currentTimeMillis()) entry.cycleDay else 0L,
+                entry.sourceExpiresAt)
         }.filter { it > 0L }.minOrNull() ?: 0L
         val exact = AlarmScheduler.canScheduleExact(context)
         val audible = entries.any { it.monitoring() &&

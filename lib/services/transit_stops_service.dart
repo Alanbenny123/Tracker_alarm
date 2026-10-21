@@ -95,7 +95,12 @@ class TransitStopsService {
         response = await request();
       }
       return (response ?? [])
-          .map((item) => Place.fromJson(Map<String, dynamic>.from(item as Map)))
+          .map(
+            (item) => Place.fromJson({
+              ...Map<String, dynamic>.from(item as Map),
+              'googleFetchedAt': _now().toIso8601String(),
+            }),
+          )
           .toList();
     } on PlatformException catch (e) {
       throw TransitStopsException(

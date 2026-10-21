@@ -51,6 +51,39 @@ void main() {
   });
 
   test(
+    'expired Google coordinates are removed from saved places and history',
+    () async {
+      final store = RawMemoryStorage();
+      final oldPlace = stationA.copyWith(
+        id: 'google',
+        googleFetchedAt: DateTime.now().subtract(const Duration(days: 31)),
+      );
+      await store.setString('saved_places', jsonEncode([oldPlace.toJson()]));
+      await store.setString(
+        'history',
+        jsonEncode([
+          TripRecord(
+            alarm: DestinationAlarm(
+              id: 'old-trip',
+              place: oldPlace,
+              radius: 500,
+              vibration: true,
+              sound: 'Bell',
+              startedAt: DateTime.now(),
+            ),
+            endedAt: DateTime.now(),
+            status: 'completed',
+          ).toJson(),
+        ]),
+      );
+      expect(await store.savedPlaces(), isEmpty);
+      expect(await store.history(), isEmpty);
+      expect(store.values['saved_places'], '[]');
+      expect(store.values['history'], '[]');
+    },
+  );
+
+  test(
     'saved places reject invalid coordinates and missing IDs individually',
     () async {
       final store = RawMemoryStorage();
@@ -131,21 +164,18 @@ void main() {
     },
   );
 
-  test(
-    'history adds and clear are serialized so pending saves cannot undo deletion',
-    () async {
-      final store = RawMemoryStorage()..historyWriteGate = Completer<void>();
-      final history = HistoryController(store);
-      final first = history.add(trip('first'));
-      await Future<void>.delayed(Duration.zero);
-      final second = history.add(trip('second'));
-      final clear = history.clear();
-      store.historyWriteGate!.complete();
-      await Future.wait([first, second, clear]);
-      expect(history.trips, isEmpty);
-      expect(await store.history(), isEmpty);
-    },
-  );
+  test('history adds and clear are serialized so pending saves cannot undo deletion', () async {
+    final store = RawMemoryStorage()..historyWriteGate = Completer<void>();
+    final history = HistoryController(store);
+    final first = history.add(trip('first'));
+    await Future<void>.delayed(Duration.zero);
+    final second = history.add(trip('second'));
+    final clear = history.clear();
+    store.historyWriteGate!.complete();
+    await Future.wait([first, second, clear]);
+    expect(history.trips, isEmpty);
+    expect(await store.history(), isEmpty);
+  });
 
   test(
     'failed place and settings writes do not change displayed values',

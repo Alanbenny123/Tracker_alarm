@@ -57,10 +57,9 @@ class SettingsController extends ChangeNotifier {
         (e) => e.name == storedTheme,
         orElse: () => ThemeModeSetting.dark,
       );
-      defaultRadius =
-          (await _storage.getDouble('default_radius') ?? 500)
-              .clamp(100, 2000)
-              .toDouble();
+      defaultRadius = (await _storage.getDouble('default_radius') ?? 500)
+          .clamp(100, 2000)
+          .toDouble();
       sound = await _storage.getString('sound') ?? 'Default alarm';
       vibration = await _storage.getBool('vibration') ?? true;
     } catch (_) {
@@ -140,16 +139,18 @@ class PlacesController extends ChangeNotifier {
       _loaded = true;
       error = null;
     } catch (_) {
-      error =
-          'Could not read saved places. Retry before adding or removing places.';
+      error = 'Could not read saved places. Retry before adding or removing places.';
     }
     notifyListeners();
   }
 
   Future<void> _save(List<Place> next) async {
     try {
-      await _storage.setSavedPlaces(next);
-      places = next;
+      final current = next
+          .where((place) => !place.expiredAt(DateTime.now()))
+          .toList();
+      await _storage.setSavedPlaces(current);
+      places = current;
       error = null;
       notifyListeners();
     } catch (_) {
@@ -208,8 +209,7 @@ class HistoryController extends ChangeNotifier {
       _loaded = true;
       error = null;
     } catch (_) {
-      error =
-          'Could not read trip history. Finished alarms will be kept until you retry.';
+      error = 'Could not read trip history. Finished alarms will be kept until you retry.';
     }
     notifyListeners();
   }
@@ -254,10 +254,9 @@ class LocationController extends ChangeNotifier {
   Future<void>? _refreshFuture;
   bool _trackingRequested = false;
 
-  Future<void> refresh() =>
-      _refreshFuture ??= _refresh().whenComplete(() {
-        _refreshFuture = null;
-      });
+  Future<void> refresh() => _refreshFuture ??= _refresh().whenComplete(() {
+    _refreshFuture = null;
+  });
 
   Future<void> _refresh() async {
     loading = true;
@@ -324,6 +323,7 @@ class AlarmProgress {
     this.lastGpsFixAt,
     this.gpsAccuracy,
     this.nextRepeatAt,
+    this.endedAt,
   });
 
   final DestinationAlarm alarm;
@@ -340,6 +340,7 @@ class AlarmProgress {
   final DateTime? lastGpsFixAt;
   final double? gpsAccuracy;
   final DateTime? nextRepeatAt;
+  final DateTime? endedAt;
 
   bool get live =>
       status == 'active' ||
@@ -379,8 +380,7 @@ class AlarmController extends ChangeNotifier {
       },
       onError: (Object event) {
         if (_disposed || epoch != _statusEpoch) return;
-        error =
-            'Live alarm updates are unavailable. Refresh alarms or reopen the app.';
+        error = 'Live alarm updates are unavailable. Refresh alarms or reopen the app.';
         notifyListeners();
       },
     );
@@ -436,6 +436,13 @@ class AlarmController extends ChangeNotifier {
           address: state['address'] as String? ?? '',
           latitude: (state['latitude'] as num).toDouble(),
           longitude: (state['longitude'] as num).toDouble(),
+          googleFetchedAt:
+              (state['sourceExpiresAt'] as num?) == null ||
+                  (state['sourceExpiresAt'] as num).toInt() <= 0
+              ? null
+              : DateTime.fromMillisecondsSinceEpoch(
+                  (state['sourceExpiresAt'] as num).toInt(),
+                ).subtract(const Duration(days: 30)),
         ),
         radius: (state['radius'] as num).toDouble(),
         vibration: state['vibration'] as bool? ?? true,
@@ -443,18 +450,16 @@ class AlarmController extends ChangeNotifier {
         startedAt: DateTime.fromMillisecondsSinceEpoch(
           (state['startedAt'] as num).toInt(),
         ),
-        alertAt:
-            alertAt == null
-                ? null
-                : DateTime.fromMillisecondsSinceEpoch(alertAt.toInt()),
+        alertAt: alertAt == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(alertAt.toInt()),
         repeatDays: (state['repeatDays'] as num?)?.toInt() ?? 0,
         leadMinutes: (state['leadMinutes'] as num?)?.toInt() ?? 0,
-        repeatStartDay:
-            state['repeatStartDay'] == null
-                ? null
-                : DateTime.fromMillisecondsSinceEpoch(
-                  (state['repeatStartDay'] as num).toInt(),
-                ),
+        repeatStartDay: state['repeatStartDay'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(
+                (state['repeatStartDay'] as num).toInt(),
+              ),
       ),
       status: state['status'] as String? ?? 'active',
       timeFired: state['timeFired'] == true,
@@ -466,19 +471,24 @@ class AlarmController extends ChangeNotifier {
       monitoringHealthy: state['monitoringHealthy'] as bool?,
       gpsStatus: state['gpsStatus'] as String?,
       geofenceStatus: state['geofenceStatus'] as String?,
-      lastGpsFixAt:
-          state['lastGpsFixAt'] == null
-              ? null
-              : DateTime.fromMillisecondsSinceEpoch(
-                (state['lastGpsFixAt'] as num).toInt(),
-              ),
+      lastGpsFixAt: state['lastGpsFixAt'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(
+              (state['lastGpsFixAt'] as num).toInt(),
+            ),
       gpsAccuracy: (state['gpsAccuracy'] as num?)?.toDouble(),
-      nextRepeatAt:
-          state['nextRepeatAt'] == null
-              ? null
-              : DateTime.fromMillisecondsSinceEpoch(
-                (state['nextRepeatAt'] as num).toInt(),
-              ),
+      nextRepeatAt: state['nextRepeatAt'] == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(
+              (state['nextRepeatAt'] as num).toInt(),
+            ),
+      endedAt:
+          (state['endedAt'] as num?) == null ||
+              (state['endedAt'] as num).toInt() <= 0
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(
+              (state['endedAt'] as num).toInt(),
+            ),
     );
   }
 
@@ -490,14 +500,13 @@ class AlarmController extends ChangeNotifier {
     final nextSignature = next.map(_signature).join('|');
     final oldSelected = _selectedId;
     _entries = next;
-    final ringing =
-        next.where((entry) => entry.status == 'triggered').toList()
-          ..sort((a, b) {
-            final order = a.triggeredAt.compareTo(b.triggeredAt);
-            return order != 0
-                ? order
-                : a.alarm.startedAt.compareTo(b.alarm.startedAt);
-          });
+    final ringing = next.where((entry) => entry.status == 'triggered').toList()
+      ..sort((a, b) {
+        final order = a.triggeredAt.compareTo(b.triggeredAt);
+        return order != 0
+            ? order
+            : a.alarm.startedAt.compareTo(b.alarm.startedAt);
+      });
     if (ringing.isNotEmpty) {
       _selectedId = ringing.first.alarm.id;
     } else if (!next.any((entry) => entry.alarm.id == _selectedId)) {
@@ -513,7 +522,7 @@ class AlarmController extends ChangeNotifier {
       await _history.add(
         TripRecord(
           alarm: entry.alarm,
-          endedAt: DateTime.now(),
+          endedAt: entry.endedAt ?? DateTime.now(),
           status: entry.status,
         ),
       );
@@ -572,10 +581,9 @@ class AlarmController extends ChangeNotifier {
     if (_syncAgain) unawaited(syncStatus());
   }
 
-  Future<void> syncStatus() =>
-      _syncFuture ??= _syncStatus().whenComplete(() {
-        _syncFuture = null;
-      });
+  Future<void> syncStatus() => _syncFuture ??= _syncStatus().whenComplete(() {
+    _syncFuture = null;
+  });
 
   Future<void> _syncStatus() async {
     do {
@@ -633,10 +641,9 @@ class AlarmController extends ChangeNotifier {
         throw LocationException(requirements.missingMessage);
       }
       final now = DateTime.now();
-      final firstRepeatDay =
-          repeatDays == 0 || alertAt != null
-              ? repeatStartDay
-              : repeatStartDay ?? nextRepeatDay(repeatDays, now);
+      final firstRepeatDay = repeatDays == 0 || alertAt != null
+          ? repeatStartDay
+          : repeatStartDay ?? nextRepeatDay(repeatDays, now);
       final target =
           firstRepeatDay ?? alertAt?.add(Duration(minutes: leadMinutes));
       final repeatDistanceReady =

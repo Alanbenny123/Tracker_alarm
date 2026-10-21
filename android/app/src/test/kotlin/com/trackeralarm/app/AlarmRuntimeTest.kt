@@ -534,6 +534,47 @@ class AlarmRuntimeTest {
         controller.destroy()
     }
 
+    @Test fun completedRepeatCycleIsArchivedSeparatelyFromNextCycle() {
+        val day = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }
+        val weekday = (day.get(Calendar.DAY_OF_WEEK) + 5) % 7
+        save(entry("commute").copy(status = "triggered", distanceFired = true,
+            repeatDays = 1 shl weekday, cycleDay = day.timeInMillis,
+            cycleDate = day.get(Calendar.YEAR) * 10000 +
+                (day.get(Calendar.MONTH) + 1) * 100 + day.get(Calendar.DAY_OF_MONTH)))
+        MultiAlarmRuntime.dismiss(app, "commute")
+        val states = MultiAlarmRuntime.states(app)
+        assertEquals(2, states.size)
+        assertTrue(states.any { it["id"] == "commute" && it["status"] == "active" })
+        val cycle = states.single { (it["id"] as String).contains(":cycle:") }
+        assertEquals("completed", cycle["status"])
+        assertTrue((cycle["endedAt"] as Long) > 0L)
+    }
+
+    @Test fun expiredGoogleCoordinatesAreRemovedBeforeAnotherAlarmCanRing() {
+        save(entry("expired").copy(sourceExpiresAt = System.currentTimeMillis() - 1L),
+            entry("current", 0.02))
+        val states = MultiAlarmRuntime.states(app)
+        val expired = states.single { it["id"] == "expired" }
+        assertEquals("cancelled", expired["status"])
+        assertEquals(0.0, expired["latitude"])
+        assertEquals(0.0, expired["longitude"])
+        assertEquals(0L, expired["sourceExpiresAt"])
+        assertTrue(states.any { it["id"] == "current" && it["status"] == "active" })
+    }
+
+    @Test fun completedGoogleAlarmDoesNotKeepPlacesCoordinatesInHistory() {
+        save(entry("finished").copy(latitude = 10.0, longitude = 20.0,
+            sourceExpiresAt = System.currentTimeMillis() + 86_400_000L))
+        MultiAlarmRuntime.finish(app, "finished", "completed")
+        val finished = MultiAlarmRuntime.states(app).single()
+        assertEquals(0.0, finished["latitude"])
+        assertEquals(0.0, finished["longitude"])
+        assertEquals(0L, finished["sourceExpiresAt"])
+    }
+
     @Test fun testAlarmIsIsolatedAndStopsAutomaticallyWithWakeLockCleanup() {
         ShadowMediaPlayer.setMediaInfoProvider { ShadowMediaPlayer.MediaInfo(1000, 0) }
         save(entry("untouched", 0.02))

@@ -61,8 +61,9 @@ class AlarmRequirements {
         notifications: value['notifications'] == true,
         exactAlarms: value['exactAlarms'] == true,
         fullScreenAlarms: value['fullScreenAlarms'] == true,
-        warnings:
-            (value['warnings'] as List? ?? []).whereType<String>().toList(),
+        warnings: (value['warnings'] as List? ?? [])
+            .whereType<String>()
+            .toList(),
         batteryOptimizationOff: value['batteryOptimizationOff'] == true,
         batteryManuallyConfirmed: value['batteryManuallyConfirmed'] == true,
       );
@@ -92,6 +93,9 @@ class GeofenceService {
         'address': alarm.place.address,
         'latitude': alarm.place.latitude,
         'longitude': alarm.place.longitude,
+        'sourceExpiresAt': alarm.place.googleFetchedAt
+            ?.add(const Duration(days: 30))
+            .millisecondsSinceEpoch,
         'radius': alarm.radius,
         'vibration': alarm.vibration,
         'sound': alarm.sound,
@@ -123,6 +127,9 @@ class GeofenceService {
   ) => _channel.invokeMethod<void>('multiUpdate', {
     'id': id,
     'name': place.name,
+    'sourceExpiresAt': place.googleFetchedAt
+        ?.add(const Duration(days: 30))
+        .millisecondsSinceEpoch,
     'address': place.address,
     'latitude': place.latitude,
     'longitude': place.longitude,

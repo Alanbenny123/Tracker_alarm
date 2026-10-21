@@ -152,30 +152,47 @@ void main() {
     },
   );
 
-  testWidgets(
-    'empty stop searches explain the 5 km search radius',
-    (tester) async {
-      final places = _Places();
-      final stops = _Stops();
-      await tester.pumpWidget(_app(places, stops, TravelMode.bus));
-      await tester.pump();
-      stops.requests.single.complete([]);
-      await tester.pump();
-      expect(
-        find.textContaining('No mapped bus stops found within 5 km'),
-        findsOneWidget,
-      );
-      await tester.tap(find.text('Railway'));
-      await tester.pump();
-      stops.requests.last.complete([]);
-      await tester.pump();
-      expect(
-        find.textContaining('No mapped railway stations found within 5 km'),
-        findsOneWidget,
-      );
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+  testWidgets('empty stop searches explain the 5 km search radius', (
+    tester,
+  ) async {
+    final places = _Places();
+    final stops = _Stops();
+    await tester.pumpWidget(_app(places, stops, TravelMode.bus));
+    await tester.pump();
+    stops.requests.single.complete([]);
+    await tester.pump();
+    expect(
+      find.textContaining('No mapped bus stops found within 5 km'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Railway'));
+    await tester.pump();
+    stops.requests.last.complete([]);
+    await tester.pump();
+    expect(
+      find.textContaining('No mapped railway stations found within 5 km'),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('a full stop result set explains the 20-result limit', (
+    tester,
+  ) async {
+    final places = _Places();
+    final stops = _Stops();
+    await tester.pumpWidget(_app(places, stops, TravelMode.bus));
+    await tester.pump();
+    stops.requests.single.complete([
+      for (var i = 0; i < 20; i++) stationA.copyWith(name: 'Stop $i'),
+    ]);
+    await tester.pump();
+    expect(
+      find.textContaining('Showing the 20 closest results'),
+      findsOneWidget,
+    );
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('short queries show guidance without making a request', (
     tester,

@@ -211,6 +211,7 @@ class SharedLocationService {
         ? 'Shared location'
         : placePath.replaceAll('+', ' ');
     return Place(
+      googleFetchedAt: DateTime.now(),
       name: name.isEmpty ? 'Shared location' : name,
       address:
           '${coordinates.$1.toStringAsFixed(6)}, ${coordinates.$2.toStringAsFixed(6)}',

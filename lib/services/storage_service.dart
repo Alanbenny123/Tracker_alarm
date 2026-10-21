@@ -12,13 +12,27 @@ class StorageService extends ChangeNotifier {
   final Map<String, String> _warnings = {};
   List<String> get warnings => List.unmodifiable(_warnings.values);
 
-  Future<List<Place>> savedPlaces() => _readList('saved_places', (json) {
-    final place = Place.fromJson(json);
-    if (place.id == null || place.id!.trim().isEmpty) {
-      throw const FormatException('Missing saved place ID');
+  Future<List<Place>> savedPlaces() async {
+    final places = await _readList('saved_places', (json) {
+      final place = Place.fromJson(json);
+      if (place.id == null || place.id!.trim().isEmpty) {
+        throw const FormatException('Missing saved place ID');
+      }
+      return place;
+    });
+    final current = places
+        .where((place) => !place.expiredAt(DateTime.now()))
+        .toList();
+    if (current.length != places.length) {
+      await setSavedPlaces(current);
+      await setString('recovery_saved_places', '');
+      reportFailure(
+        'saved_places',
+        'Expired Google places were removed. Search and save them again.',
+      );
     }
-    return place;
-  });
+    return current;
+  }
 
   void reportFailure(String key, String message) {
     _warnings[key] = message;
@@ -27,29 +41,41 @@ class StorageService extends ChangeNotifier {
 
   Future<void> setSavedPlaces(List<Place> places) => _writeList(
     'saved_places',
-    places.map((place) => place.toJson()).toList(),
+    places
+        .where((place) => !place.expiredAt(DateTime.now()))
+        .map((place) => place.toJson())
+        .toList(),
   );
 
   Future<List<TripRecord>> history() async {
     final trips = await _readList('history', TripRecord.fromJson);
-    final bounded = boundedHistory(trips);
+    final bounded = boundedHistory(
+      trips.where((trip) => !trip.alarm.place.expiredAt(DateTime.now())),
+    );
     if (bounded.length != trips.length) await setHistory(bounded);
+    if (bounded.length != trips.length) await setString('recovery_history', '');
     return bounded;
   }
 
   static List<TripRecord> boundedHistory(Iterable<TripRecord> trips) {
-    final sorted =
-        trips.toList()..sort((a, b) => b.endedAt.compareTo(a.endedAt));
+    final sorted = trips.toList()
+      ..sort((a, b) => b.endedAt.compareTo(a.endedAt));
     final ids = <String>{};
     return sorted
-        .where((trip) => ids.add(trip.alarm.id))
+        .where(
+          (trip) =>
+              !trip.alarm.place.expiredAt(DateTime.now()) &&
+              ids.add(trip.alarm.id),
+        )
         .take(historyLimit)
         .toList();
   }
 
   Future<void> setHistory(List<TripRecord> trips) => _writeList(
     'history',
-    boundedHistory(trips).map((trip) => trip.toJson()).toList(),
+    boundedHistory(
+      trips.where((trip) => !trip.alarm.place.expiredAt(DateTime.now())),
+    ).map((trip) => trip.toJson()).toList(),
   );
 
   Future<void> clearHistory() => _clearList('history');
@@ -76,8 +102,7 @@ class StorageService extends ChangeNotifier {
   Future<void> preserveDamagedLegacy(String raw) async {
     await setString('recovery_active_alarm', raw);
     await setString('active_alarm', '');
-    _warnings['active_alarm'] =
-        'An old alarm could not be read. A damaged copy is kept locally; recreate that alarm.';
+    _warnings['active_alarm'] = 'An old alarm could not be read. A damaged copy is kept locally; recreate that alarm.';
     notifyListeners();
   }
 

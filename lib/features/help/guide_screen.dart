@@ -113,6 +113,7 @@ class GuideScreen extends StatelessWidget {
           points: [
             'The latest 100 trips are kept locally. Use Clear trip history in History or Settings to delete trips and their recovery copies. Active alarms and saved places are kept.',
             'Saved places can be removed individually or cleared in Settings. Android cloud backup and device transfer are disabled for app data.',
+            'Google-sourced destination coordinates expire after 30 days. Reselect an expired destination to keep a repeating alarm active; expired saved places are removed when the app reads them.',
             'If saved data is damaged, valid entries are recovered and Settings shows a warning. Check your alarms and recreate any missing ones. Delete damaged recovery copies in Settings when you no longer need them.',
           ],
         ),

@@ -5,16 +5,29 @@ class Place {
     required this.latitude,
     required this.longitude,
     this.id,
+    this.googleFetchedAt,
   });
 
   final String? id;
+
+  /// When coordinates came from Google Places or a resolved Maps link.
+  final DateTime? googleFetchedAt;
+  bool expiredAt(DateTime now) =>
+      googleFetchedAt != null &&
+      !now.isBefore(googleFetchedAt!.add(const Duration(days: 30)));
   final String name;
   final String address;
   final double latitude;
   final double longitude;
 
-  Place copyWith({String? id, String? name, String? address}) => Place(
+  Place copyWith({
+    String? id,
+    String? name,
+    String? address,
+    DateTime? googleFetchedAt,
+  }) => Place(
     id: id ?? this.id,
+    googleFetchedAt: googleFetchedAt ?? this.googleFetchedAt,
     name: name ?? this.name,
     address: address ?? this.address,
     latitude: latitude,
@@ -23,6 +36,7 @@ class Place {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'googleFetchedAt': googleFetchedAt?.toIso8601String(),
     'name': name,
     'address': address,
     'latitude': latitude,
@@ -42,6 +56,9 @@ class Place {
     }
     return Place(
       id: json['id'] as String?,
+      googleFetchedAt: json['googleFetchedAt'] == null
+          ? null
+          : DateTime.parse(json['googleFetchedAt'] as String),
       name: json['name'] as String? ?? 'Selected location',
       address: json['address'] as String? ?? '',
       latitude: latitude,

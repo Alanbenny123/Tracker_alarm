@@ -225,7 +225,11 @@ class _DestinationPickerScreenState
         stops = found;
         loadingStops = false;
         stopsLoaded = true;
-        transitNotice = stopsService.notice;
+        transitNotice =
+            stopsService.notice ??
+            (found.length >= 20
+                ? 'Showing the 20 closest results. Search a smaller area or search for a stop by name to find others.'
+                : null);
       });
     } catch (e) {
       if (!mounted || generation != searchGeneration) return;
