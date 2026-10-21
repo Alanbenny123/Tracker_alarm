@@ -83,6 +83,22 @@ void main() {
     },
   );
 
+  test('legacy places without source metadata are removed on read', () async {
+    final store = RawMemoryStorage();
+    final oldPlace = stationA.copyWith(id: 'legacy').toJson()
+      ..remove('googleFetchedAt');
+    final oldTrip = trip('legacy-trip').toJson();
+    (oldTrip['alarm'] as Map)['place'].remove('googleFetchedAt');
+    store.values['saved_places'] = jsonEncode([oldPlace]);
+    store.values['history'] = jsonEncode([oldTrip]);
+
+    expect(await store.savedPlaces(), isEmpty);
+    expect(await store.history(), isEmpty);
+    expect(store.values['saved_places'], '[]');
+    expect(store.values['last_good_history'], '[]');
+    expect(store.values['recovery_saved_places'], isEmpty);
+  });
+
   test(
     'saved places reject invalid coordinates and missing IDs individually',
     () async {

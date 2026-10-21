@@ -21,14 +21,16 @@ class StorageService extends ChangeNotifier {
       return place;
     });
     final current = places
-        .where((place) => !place.expiredAt(DateTime.now()))
+        .where(
+          (place) => place.sourceTracked && !place.expiredAt(DateTime.now()),
+        )
         .toList();
     if (current.length != places.length) {
       await setSavedPlaces(current);
       await setString('recovery_saved_places', '');
       reportFailure(
         'saved_places',
-        'Expired Google places were removed. Search and save them again.',
+        'Older places without a recorded source or expired Google places were removed. Search and save them again.',
       );
     }
     return current;
@@ -42,7 +44,9 @@ class StorageService extends ChangeNotifier {
   Future<void> setSavedPlaces(List<Place> places) => _writeList(
     'saved_places',
     places
-        .where((place) => !place.expiredAt(DateTime.now()))
+        .where(
+          (place) => place.sourceTracked && !place.expiredAt(DateTime.now()),
+        )
         .map((place) => place.toJson())
         .toList(),
   );
@@ -50,7 +54,11 @@ class StorageService extends ChangeNotifier {
   Future<List<TripRecord>> history() async {
     final trips = await _readList('history', TripRecord.fromJson);
     final bounded = boundedHistory(
-      trips.where((trip) => !trip.alarm.place.expiredAt(DateTime.now())),
+      trips.where(
+        (trip) =>
+            trip.alarm.place.sourceTracked &&
+            !trip.alarm.place.expiredAt(DateTime.now()),
+      ),
     );
     if (bounded.length != trips.length) await setHistory(bounded);
     if (bounded.length != trips.length) await setString('recovery_history', '');
@@ -64,6 +72,7 @@ class StorageService extends ChangeNotifier {
     return sorted
         .where(
           (trip) =>
+              trip.alarm.place.sourceTracked &&
               !trip.alarm.place.expiredAt(DateTime.now()) &&
               ids.add(trip.alarm.id),
         )
@@ -74,7 +83,11 @@ class StorageService extends ChangeNotifier {
   Future<void> setHistory(List<TripRecord> trips) => _writeList(
     'history',
     boundedHistory(
-      trips.where((trip) => !trip.alarm.place.expiredAt(DateTime.now())),
+      trips.where(
+        (trip) =>
+            trip.alarm.place.sourceTracked &&
+            !trip.alarm.place.expiredAt(DateTime.now()),
+      ),
     ).map((trip) => trip.toJson()).toList(),
   );
 

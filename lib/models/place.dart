@@ -6,12 +6,16 @@ class Place {
     required this.longitude,
     this.id,
     this.googleFetchedAt,
+    this.sourceTracked = true,
   });
 
   final String? id;
 
   /// When coordinates came from Google Places or a resolved Maps link.
   final DateTime? googleFetchedAt;
+
+  /// False only for records saved before coordinate provenance was recorded.
+  final bool sourceTracked;
   bool expiredAt(DateTime now) =>
       googleFetchedAt != null &&
       !now.isBefore(googleFetchedAt!.add(const Duration(days: 30)));
@@ -28,6 +32,7 @@ class Place {
   }) => Place(
     id: id ?? this.id,
     googleFetchedAt: googleFetchedAt ?? this.googleFetchedAt,
+    sourceTracked: sourceTracked,
     name: name ?? this.name,
     address: address ?? this.address,
     latitude: latitude,
@@ -59,6 +64,7 @@ class Place {
       googleFetchedAt: json['googleFetchedAt'] == null
           ? null
           : DateTime.parse(json['googleFetchedAt'] as String),
+      sourceTracked: json.containsKey('googleFetchedAt'),
       name: json['name'] as String? ?? 'Selected location',
       address: json['address'] as String? ?? '',
       latitude: latitude,

@@ -323,6 +323,14 @@ class _DestinationPickerScreenState
   Widget build(BuildContext context) {
     final position = ref.watch(locationProvider).position;
     final radius = mode.defaultAlertRadius;
+    final showStopsPanel =
+        mode.usesStops &&
+        selected == null &&
+        results.isEmpty &&
+        !searching &&
+        emptyPlaceQuery == null &&
+        errorSource != _SearchErrorSource.place &&
+        queryHint == null;
     return Scaffold(
       appBar: AppBar(title: const Text('Choose destination')),
       body: Column(
@@ -336,6 +344,9 @@ class _DestinationPickerScreenState
                   areaCenter: areaCenter,
                   places: stops,
                   radius: radius,
+                  attributionBottomInset: selected != null || showStopsPanel
+                      ? 290
+                      : 0,
                   onTap: selectPoint,
                   onPlaceTap: _selectStop,
                   onDestinationDrag: mode.usesStops ? null : selectPoint,
@@ -486,13 +497,7 @@ class _DestinationPickerScreenState
                     ),
                   ),
                 ),
-                if (mode.usesStops &&
-                    selected == null &&
-                    results.isEmpty &&
-                    !searching &&
-                    emptyPlaceQuery == null &&
-                    errorSource != _SearchErrorSource.place &&
-                    queryHint == null)
+                if (showStopsPanel)
                   Positioned(
                     left: 12,
                     right: 12,

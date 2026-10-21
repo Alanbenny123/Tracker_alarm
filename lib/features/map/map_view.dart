@@ -23,6 +23,7 @@ class MapView extends StatefulWidget {
     this.onCameraMove,
     this.interactive = true,
     this.compactPlaceholder = false,
+    this.attributionBottomInset = 0,
   });
   final Position? position;
   final Place? destination;
@@ -35,6 +36,9 @@ class MapView extends StatefulWidget {
   final ValueChanged<LatLng>? onCameraMove;
   final bool interactive;
   final bool compactPlaceholder;
+
+  /// Moves the SDK's Google logo above any panel drawn over the map.
+  final double attributionBottomInset;
 
   @override
   State<MapView> createState() => _MapViewState();
@@ -173,6 +177,7 @@ class _MapViewState extends State<MapView> {
     return Stack(
       children: [
         gm.GoogleMap(
+          padding: EdgeInsets.only(bottom: widget.attributionBottomInset),
           initialCameraPosition: gm.CameraPosition(
             target: center,
             zoom: widget.destination != null

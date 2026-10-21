@@ -565,6 +565,34 @@ class AlarmRuntimeTest {
         assertTrue(states.any { it["id"] == "current" && it["status"] == "active" })
     }
 
+    @Test fun legacyAlarmWithoutSourceMarkerGetsConservativeExpiry() {
+        val old = entry("legacy", 20.0).json()
+        old.remove("sourceExpiresAt")
+        val stored = app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE)
+        stored.edit().putString("alarms", JSONArray().put(old).toString()).commit()
+        val state = MultiAlarmRuntime.states(app).single()
+        assertTrue((state["sourceExpiresAt"] as Long) > System.currentTimeMillis())
+        assertTrue(stored.getString("alarms", "")!!.contains("sourceExpiresAt"))
+
+        old.put("startedAt", System.currentTimeMillis() - 31L * 24 * 60 * 60 * 1000)
+        stored.edit().putString("alarms", JSONArray().put(old).toString()).commit()
+        val expired = MultiAlarmRuntime.states(app).single()
+        assertEquals("cancelled", expired["status"])
+        assertEquals(0.0, expired["longitude"])
+    }
+
+    @Test fun completedLegacyAlarmLosesUnknownSourceCoordinates() {
+        val old = entry("legacy-done", 20.0).json()
+        old.remove("sourceExpiresAt")
+        old.put("status", "completed")
+        val stored = app.getSharedPreferences("destination_multi_monitor", Context.MODE_PRIVATE)
+        stored.edit().putString("alarms", JSONArray().put(old).toString()).commit()
+        val state = MultiAlarmRuntime.states(app).single()
+        assertEquals(0.0, state["longitude"])
+        assertEquals(0L, state["sourceExpiresAt"])
+        assertFalse(stored.getString("alarms", "")!!.contains("\"longitude\":20"))
+    }
+
     @Test fun completedGoogleAlarmDoesNotKeepPlacesCoordinatesInHistory() {
         save(entry("finished").copy(latitude = 10.0, longitude = 20.0,
             sourceExpiresAt = System.currentTimeMillis() + 86_400_000L))

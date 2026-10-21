@@ -104,12 +104,17 @@ object MultiAlarmRuntime {
         }
 
         companion object {
-            fun from(json: JSONObject) = Entry(
+            fun from(json: JSONObject): Entry {
+                val legacy = !json.has("sourceExpiresAt")
+                val startedAt = json.optLong("startedAt", System.currentTimeMillis())
+                val sourceExpiresAt = if (legacy) startedAt + 30L * 24 * 60 * 60 * 1000
+                    else json.optLong("sourceExpiresAt", 0L)
+                val entry = Entry(
                 id = json.getString("id"), name = json.optString("name", "Destination"),
                 address = json.optString("address", ""), latitude = json.getDouble("latitude"),
                 longitude = json.getDouble("longitude"), radius = json.getDouble("radius").toFloat(),
                 vibration = json.optBoolean("vibration", true), sound = json.optString("sound", "Default alarm"),
-                startedAt = json.optLong("startedAt", System.currentTimeMillis()),
+                startedAt = startedAt,
                 alertAt = json.optLong("alertAt", 0L), status = json.optString("status", "active"),
                 timeFired = json.optBoolean("timeFired", false),
                 distanceFired = json.optBoolean("distanceFired", false),
@@ -125,8 +130,13 @@ object MultiAlarmRuntime {
                 label = json.optString("label", ""), paused = json.optBoolean("paused", false),
                 monitoringSince = json.optLong("monitoringSince", json.optLong("startedAt", 0L)),
                 endedAt = json.optLong("endedAt", 0L),
-                sourceExpiresAt = json.optLong("sourceExpiresAt", 0L),
+                sourceExpiresAt = sourceExpiresAt,
             )
+                // Older entries have no source marker. Keep live alarms for at most
+                // 30 days from creation; finished entries no longer need coordinates.
+                return if (legacy && !entry.live()) entry.withoutGoogleCoordinates()
+                    else entry
+            }
         }
     }
 
@@ -167,8 +177,9 @@ object MultiAlarmRuntime {
             stored.edit().putString("recovery_alarms", raw)
                 .putString("storage_warning", "Alarm storage contained damaged data. ${decoded.first.size} alarms recovered. Check your active alarms and recreate any missing alarms.")
                 .putString(KEY, valid).putString("last_good_alarms", valid).commit()
-        } else if (stored.getString("last_good_alarms", null) != valid) {
-            stored.edit().putString("last_good_alarms", valid).commit()
+        } else if (stored.getString(KEY, null) != valid ||
+            stored.getString("last_good_alarms", null) != valid) {
+            stored.edit().putString(KEY, valid).putString("last_good_alarms", valid).commit()
         }
         return decoded.first
     }

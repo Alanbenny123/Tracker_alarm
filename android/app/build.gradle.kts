@@ -17,6 +17,26 @@ if (localPropertiesFile.exists()) {
     FileInputStream(localPropertiesFile).use { localProperties.load(it) }
 }
 val googleMapsApiKey = localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
+val releaseRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+if (releaseRequested) {
+    check(googleMapsApiKey.isNotBlank()) {
+        "Release needs GOOGLE_MAPS_API_KEY in android/local.properties."
+    }
+    check(keystorePropertiesFile.isFile) {
+        "Release needs android/key.properties. Copy android/key.properties.example and fill it in."
+    }
+    val requiredSigningProperties = listOf("storePassword", "keyPassword", "keyAlias", "storeFile")
+    val missing = requiredSigningProperties.filter {
+        keystoreProperties.getProperty(it).isNullOrBlank() ||
+            keystoreProperties.getProperty(it).startsWith("REPLACE_WITH")
+    }
+    check(missing.isEmpty()) { "Release signing is incomplete in android/key.properties: ${missing.joinToString()}" }
+    check(file(keystoreProperties.getProperty("storeFile")).isFile) {
+        "Release keystore file in android/key.properties does not exist."
+    }
+}
 
 android {
     namespace = "com.trackeralarm.app"
