@@ -153,7 +153,7 @@ void main() {
   );
 
   testWidgets(
-    'empty stop searches explain coverage and respect each search radius',
+    'empty stop searches explain the 5 km search radius',
     (tester) async {
       final places = _Places();
       final stops = _Stops();
@@ -162,7 +162,7 @@ void main() {
       stops.requests.single.complete([]);
       await tester.pump();
       expect(
-        find.textContaining('No mapped bus stops found within 2.5 km'),
+        find.textContaining('No mapped bus stops found within 5 km'),
         findsOneWidget,
       );
       await tester.tap(find.text('Railway'));

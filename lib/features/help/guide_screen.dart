@@ -57,7 +57,7 @@ class GuideScreen extends StatelessWidget {
           icon: Icons.travel_explore,
           title: 'Finding a destination',
           points: [
-            'Bus and Metro show mapped stops or stations within 2.5 km of your current position, a searched area, or a point you tap on the map. Railway searches within 5 km. Move the map and tap Search this area to look around its center. Only mapped, named stops can appear.',
+            'Bus, Metro, and Railway show mapped stops or stations within 5 km of your current position, a searched area, or a point you tap on the map. Move the map and tap Search this area to look around its center. Only mapped, named stops can appear.',
             'Search an area, then choose a stop from the list or its map pin. The stop list shows straight-line distance from the searched point. Changing the query or transport cancels the previous search. For Other, search a place or tap the map to set an exact point. You can move the pin before confirming.',
             'On the setup screen, use Reselect destination to choose a different place before starting the alarm.',
           ],

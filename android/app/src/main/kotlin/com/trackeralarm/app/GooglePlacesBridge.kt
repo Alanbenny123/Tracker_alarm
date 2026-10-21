@@ -79,7 +79,7 @@ class GooglePlacesBridge(private val activity: FlutterActivity, private val mess
                         result.success(emptyList<Map<String, Any>>())
                         return@setMethodCallHandler
                     }
-                    val radius = if (mode == "railway") 5000.0 else 2500.0
+                    val radius = 5000.0
                     val request = SearchNearbyRequest.builder(
                         CircularBounds.newInstance(LatLng(latitude, longitude), radius), fields)
                         .setIncludedTypes(types)

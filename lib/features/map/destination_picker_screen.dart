@@ -542,7 +542,7 @@ class _DestinationPickerScreenState
                                                 ? 'Could not load stops in this area.'
                                                 : !stopsLoaded
                                                 ? 'Search an area or tap the map.'
-                                                : 'No mapped ${mode.placeName.toLowerCase()} found within ${mode == TravelMode.railway ? '5' : '2.5'} km. Search another area or tap a different point on the map.',
+                                                : 'No mapped ${mode.placeName.toLowerCase()} found within 5 km. Search another area or tap a different point on the map.',
                                             textAlign: TextAlign.center,
                                           ),
                                         ],
