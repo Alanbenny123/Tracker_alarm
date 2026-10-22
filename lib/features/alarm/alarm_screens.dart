@@ -415,6 +415,9 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                 const Text(
                   'Distance is measured directly to the destination, not along roads or tracks.',
                 ),
+                const Text(
+                  'After you start the alarm, GPS monitors these saved coordinates without internet.',
+                ),
                 if (eta != null)
                   Text(
                     'Straight-line estimate at current speed: ${_formatEta(eta)}',
@@ -1147,7 +1150,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
                 title: const Text('Offline monitoring'),
                 subtitle: Text(
                   'GPS checks your straight-line distance to ${alarm.place.latitude.toStringAsFixed(5)}, '
-                  '${alarm.place.longitude.toStringAsFixed(5)}. The alarm does not need map tiles.',
+                  '${alarm.place.longitude.toStringAsFixed(5)}. The alarm does not need internet or map tiles.',
                 ),
               ),
             ),

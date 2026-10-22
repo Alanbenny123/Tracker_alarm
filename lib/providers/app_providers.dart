@@ -662,9 +662,9 @@ class AlarmController extends ChangeNotifier {
               target.year == now.year &&
               target.month == now.month &&
               target.day == now.day);
-      // Future repeat days need saved coordinates and permissions, not a GPS fix
-      // at creation time. The native tracker acquires GPS on the selected day.
-      final position = repeatDistanceReady ? await _location.current() : null;
+      // A fresh fix may take time indoors. Check GPS settings, then let native
+      // tracking acquire a fresh position after registration.
+      if (repeatDistanceReady) await _location.ensureReady();
       final alarm = DestinationAlarm(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         place: place,
@@ -681,12 +681,6 @@ class AlarmController extends ChangeNotifier {
       await _geofence.multiRegister(alarm);
       registered = true;
       _selectedId = alarm.id;
-      if (position != null &&
-          position.accuracy <= radius &&
-          _location.distance(position, place.latitude, place.longitude) <=
-              radius) {
-        await _geofence.multiTrigger(alarm.id);
-      }
       await _applyNativeStates(await _geofence.multiStates());
     } catch (e) {
       if (registered) {

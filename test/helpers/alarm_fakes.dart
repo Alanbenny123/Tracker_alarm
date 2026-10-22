@@ -142,9 +142,9 @@ class FakeNative extends GeofenceService {
     final alarm = entry(id);
     alarm['status'] =
         alarm['distanceFired'] == true &&
-                (!alarm.containsKey('alertAt') || alarm['timeFired'] == true)
-            ? 'completed'
-            : 'active';
+            (!alarm.containsKey('alertAt') || alarm['timeFired'] == true)
+        ? 'completed'
+        : 'active';
   }
 
   @override
@@ -171,15 +171,35 @@ Position positionAt(double latitude, double longitude) => Position(
 class FakeLocation extends LocationService {
   @override
   Future<Position> current() async => positionAt(0, 0);
+  @override
+  Future<void> ensureReady() async {}
 }
 
 class NeverCalledLocation extends LocationService {
   bool called = false;
   @override
+  Future<void> ensureReady() async {
+    called = true;
+    throw StateError('GPS should not be queried');
+  }
+
+  @override
   Future<Position> current() async {
     called = true;
     throw StateError('GPS should not be queried');
   }
+}
+
+class NoFixLocation extends LocationService {
+  bool called = false;
+  @override
+  Future<void> ensureReady() async {
+    called = true;
+  }
+
+  @override
+  Future<Position> current() async =>
+      throw StateError('Starting an alarm must not wait for a GPS fix');
 }
 
 const stationA = Place(

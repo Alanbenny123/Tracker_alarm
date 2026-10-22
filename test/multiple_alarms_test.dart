@@ -262,30 +262,31 @@ void main() {
     expect(controller.error, isNull);
   });
 
-  test('a repeat active today still checks GPS before registration', () async {
-    final storage = MemoryStorage();
-    final native = FakeNative();
-    final location = NeverCalledLocation();
-    final controller = AlarmController(
-      storage,
-      native,
-      location,
-      HistoryController(storage),
-    );
-    await controller.restore();
-    final days = 1 << (DateTime.now().weekday - 1);
-    await expectLater(
-      controller.start(stationA, 500, true, 'Bell', null, days),
-      throwsStateError,
-    );
-    expect(location.called, isTrue);
-    expect(native.states, isEmpty);
-  });
+  test(
+    'a repeat active today starts while the first GPS fix is pending',
+    () async {
+      final storage = MemoryStorage();
+      final native = FakeNative();
+      final location = NoFixLocation();
+      final controller = AlarmController(
+        storage,
+        native,
+        location,
+        HistoryController(storage),
+      );
+      await controller.restore();
+      final days = 1 << (DateTime.now().weekday - 1);
+      await controller.start(stationA, 500, true, 'Bell', null, days);
+      expect(location.called, isTrue);
+      expect(native.states, hasLength(1));
+      expect(native.triggeredIds, isEmpty);
+    },
+  );
 
   test('future time does not postpone a one-time distance alarm', () async {
     final storage = MemoryStorage();
     final native = FakeNative();
-    final location = NeverCalledLocation();
+    final location = NoFixLocation();
     final controller = AlarmController(
       storage,
       native,
@@ -293,18 +294,16 @@ void main() {
       HistoryController(storage),
     );
     await controller.restore();
-    await expectLater(
-      controller.start(
-        stationA,
-        500,
-        true,
-        'Bell',
-        DateTime.now().add(const Duration(days: 1)),
-      ),
-      throwsStateError,
+    await controller.start(
+      stationA,
+      500,
+      true,
+      'Bell',
+      DateTime.now().add(const Duration(days: 1)),
     );
     expect(location.called, isTrue);
-    expect(native.states, isEmpty);
+    expect(native.states, hasLength(1));
+    expect(native.triggeredIds, isEmpty);
   });
 
   test('required settings are checked before GPS is queried', () async {
