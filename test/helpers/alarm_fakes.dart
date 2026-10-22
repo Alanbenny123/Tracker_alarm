@@ -138,6 +138,9 @@ class FakeNative extends GeofenceService {
   }
 
   @override
+  Future<void> multiTriggerAt(String id, Position position) => multiTrigger(id);
+
+  @override
   Future<void> multiDismiss(String id) async {
     final alarm = entry(id);
     alarm['status'] =

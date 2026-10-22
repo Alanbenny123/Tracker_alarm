@@ -219,9 +219,15 @@ object MultiAlarmRuntime {
         }
     }
     @Synchronized fun live(context: Context): List<Entry> = read(context).filter { it.monitoring() }
-    @Synchronized fun ringing(context: Context): Entry? = read(context)
-        .filter { it.status == "triggered" && !it.paused }
-        .minWithOrNull(compareBy<Entry> { it.triggeredAt }.thenBy { it.startedAt })
+    @Synchronized fun ringing(context: Context): Entry? {
+        val pending = read(context).filter { it.status == "triggered" && !it.paused }
+        val newest = pending.maxOfOrNull { it.triggeredAt } ?: return null
+        // A single GPS fix can reach several overlapping radii. Keep their
+        // crossing order, but let a later arrival sound even if an older alert
+        // was left ringing.
+        return pending.filter { newest - it.triggeredAt < 1_000L }
+            .minWithOrNull(compareBy<Entry> { it.triggeredAt }.thenBy { it.startedAt })
+    }
 
     private fun nextTriggerTime(entries: List<Entry>): Long = maxOf(
         System.currentTimeMillis(), (entries.maxOfOrNull { it.triggeredAt } ?: 0L) + 1L)
@@ -543,6 +549,21 @@ object MultiAlarmRuntime {
             if (reason == "distance") removeGeofence(context, id)
             refresh(context)
         }
+    }
+
+    /** Flutter's visible GPS path must prove proximity to this alarm's own destination. */
+    @Synchronized fun triggerAt(context: Context, id: String, latitude: Double,
+                                longitude: Double, accuracy: Double, fixAt: Long) {
+        val entry = read(context).firstOrNull { it.id == id && it.monitoring() } ?: return
+        val now = System.currentTimeMillis()
+        if (!latitude.isFinite() || !longitude.isFinite() || !accuracy.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
+            accuracy < 0.0 || accuracy > entry.radius ||
+            now - fixAt !in 0..30_000L || fixAt < entry.monitoringSince) return
+        val distance = FloatArray(1).also {
+            Location.distanceBetween(latitude, longitude, entry.latitude, entry.longitude, it)
+        }[0]
+        if (distance <= entry.radius) trigger(context, id, "distance")
     }
 
     @Synchronized fun dismiss(context: Context, id: String) {

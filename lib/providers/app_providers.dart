@@ -427,6 +427,22 @@ class AlarmController extends ChangeNotifier {
   String get triggerReason => selected?.triggerReason ?? 'distance';
   bool get hasTriggered => _entries.any((entry) => entry.status == 'triggered');
 
+  List<AlarmProgress> get ringingAlarms {
+    final ringing = _entries.where((entry) => entry.status == 'triggered').toList()
+      ..sort((a, b) {
+        final order = a.triggeredAt.compareTo(b.triggeredAt);
+        return order != 0
+            ? order
+            : a.alarm.startedAt.compareTo(b.alarm.startedAt);
+      });
+    if (ringing.length < 2) return ringing;
+    final newest = ringing.last.triggeredAt;
+    final presenting = ringing.firstWhere(
+      (entry) => newest - entry.triggeredAt < 1000,
+    );
+    return [presenting, ...ringing.where((entry) => entry != presenting)];
+  }
+
   void select(String id) {
     if (_selectedId == id || !_entries.any((e) => e.alarm.id == id)) return;
     _selectedId = id;
@@ -509,13 +525,7 @@ class AlarmController extends ChangeNotifier {
     final nextSignature = next.map(_signature).join('|');
     final oldSelected = _selectedId;
     _entries = next;
-    final ringing = next.where((entry) => entry.status == 'triggered').toList()
-      ..sort((a, b) {
-        final order = a.triggeredAt.compareTo(b.triggeredAt);
-        return order != 0
-            ? order
-            : a.alarm.startedAt.compareTo(b.alarm.startedAt);
-      });
+    final ringing = ringingAlarms;
     if (ringing.isNotEmpty) {
       _selectedId = ringing.first.alarm.id;
     } else if (!next.any((entry) => entry.alarm.id == _selectedId)) {
@@ -840,6 +850,11 @@ class AlarmController extends ChangeNotifier {
 
   Future<void> checkVisiblePosition(Position position) async {
     if (_triggering) return;
+    final now = DateTime.now();
+    if (position.timestamp.isBefore(now.subtract(const Duration(seconds: 30))) ||
+        position.timestamp.isAfter(now.add(const Duration(seconds: 5)))) {
+      return;
+    }
     final reached =
         _entries
             .where(
@@ -848,6 +863,7 @@ class AlarmController extends ChangeNotifier {
                   entry.status != 'paused' &&
                   entry.distanceReady &&
                   !entry.distanceFired &&
+                  !position.timestamp.isBefore(entry.alarm.startedAt) &&
                   position.accuracy <= entry.alarm.radius &&
                   _location.distance(
                         position,
@@ -876,7 +892,7 @@ class AlarmController extends ChangeNotifier {
     _triggering = true;
     try {
       for (final entry in reached) {
-        await _geofence.multiTrigger(entry.alarm.id);
+        await _geofence.multiTriggerAt(entry.alarm.id, position);
       }
       await _applyNativeStates(await _geofence.multiStates());
     } catch (e) {

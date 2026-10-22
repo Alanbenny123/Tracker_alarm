@@ -20,8 +20,9 @@ class MultiGeofenceReceiver : BroadcastReceiver() {
                 Location.distanceBetween(location.latitude, location.longitude,
                     alarm.latitude, alarm.longitude, it)
             }[0]
-            val tolerance = location.accuracy.coerceIn(50f, 250f)
-            return distance.takeIf { it <= alarm.radius + tolerance }
+            // The geofence is only a wake-up hint. Confirm the selected radius
+            // with the same rule used by foreground GPS before sounding.
+            return distance.takeIf { it <= alarm.radius }
         }
     }
 

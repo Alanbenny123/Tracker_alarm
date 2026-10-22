@@ -129,7 +129,7 @@ class MainActivity : FlutterActivity() {
                     if (id == null || days == null) result.error("arguments", "Missing repeat settings", null)
                     else MultiAlarmRuntime.updateRepeat(this, id, days, result)
                 }
-                "multiFinish", "multiForget", "multiDismiss", "multiSnooze", "multiTrigger" -> {
+                "multiFinish", "multiForget", "multiDismiss", "multiSnooze", "multiTriggerAt" -> {
                     val id = call.argument<String>("id")
                     if (id.isNullOrBlank()) {
                         result.error("arguments", "Missing alarm ID", null)
@@ -147,7 +147,15 @@ class MainActivity : FlutterActivity() {
                         "multiForget" -> MultiAlarmRuntime.forget(this, id)
                         "multiDismiss" -> MultiAlarmRuntime.dismiss(this, id)
                         "multiSnooze" -> MultiAlarmRuntime.snooze(this, id, call.argument<Int>("minutes") ?: 1)
-                        "multiTrigger" -> MultiAlarmRuntime.trigger(this, id, "distance")
+                        "multiTriggerAt" -> {
+                            val latitude = call.argument<Double>("latitude")
+                            val longitude = call.argument<Double>("longitude")
+                            val accuracy = call.argument<Double>("accuracy")
+                            val fixAt = call.argument<Long>("fixAt")
+                            if (latitude != null && longitude != null && accuracy != null && fixAt != null) {
+                                MultiAlarmRuntime.triggerAt(this, id, latitude, longitude, accuracy, fixAt)
+                            }
+                        }
                     }
                     result.success(null)
                 }

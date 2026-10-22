@@ -853,7 +853,7 @@ class _AlarmSetupScreenState extends ConsumerState<AlarmSetupScreen>
                       }
                       if (context.mounted) {
                         context.go(
-                          ref.read(alarmProvider).status == 'triggered'
+                          ref.read(alarmProvider).hasTriggered
                               ? '/triggered'
                               : '/active',
                         );
@@ -1006,7 +1006,7 @@ class _ActiveAlarmScreenState extends ConsumerState<ActiveAlarmScreen> {
         ),
       );
     }
-    if (alarmState.status == 'triggered') {
+    if (alarmState.hasTriggered) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go('/triggered');
       });
@@ -1380,14 +1380,7 @@ class _AlarmTriggeredScreenState extends ConsumerState<AlarmTriggeredScreen> {
   @override
   Widget build(BuildContext context) {
     final alarmState = ref.watch(alarmProvider);
-    final ringing =
-        alarmState.alarms.where((entry) => entry.status == 'triggered').toList()
-          ..sort((a, b) {
-            final order = a.triggeredAt.compareTo(b.triggeredAt);
-            return order != 0
-                ? order
-                : a.alarm.startedAt.compareTo(b.alarm.startedAt);
-          });
+    final ringing = alarmState.ringingAlarms;
     if (ringing.isEmpty) {
       if (!_redirecting && !alarmState.restoring) {
         _redirecting = true;

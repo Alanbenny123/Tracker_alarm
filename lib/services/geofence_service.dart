@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../models/destination_alarm.dart';
 import '../models/place.dart';
@@ -161,6 +162,14 @@ class GeofenceService {
       .invokeMethod<void>('multiSnooze', {'id': id, 'minutes': minutes});
   Future<void> multiTrigger(String id) =>
       _channel.invokeMethod<void>('multiTrigger', {'id': id});
+  Future<void> multiTriggerAt(String id, Position position) =>
+      _channel.invokeMethod<void>('multiTriggerAt', {
+        'id': id,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'accuracy': position.accuracy,
+        'fixAt': position.timestamp.millisecondsSinceEpoch,
+      });
 
   // Read-only migration support for pre-multiple-alarm installations.
   Future<String> status() async =>

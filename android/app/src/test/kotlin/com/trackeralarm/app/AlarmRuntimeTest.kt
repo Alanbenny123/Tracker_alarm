@@ -182,6 +182,26 @@ class AlarmRuntimeTest {
         assertTrue(interval <= 1000)
     }
 
+    @Test fun visibleGpsOnlyTriggersTheDestinationActuallyReached() {
+        save(entry("Aluva", 0.03), entry("Ambattukavu", 0.02), entry("Edappally", 0.01))
+        val now = System.currentTimeMillis()
+        MultiAlarmRuntime.triggerAt(app, "Aluva", 0.0, 0.01, 10.0, now)
+        MultiAlarmRuntime.triggerAt(app, "Ambattukavu", 0.0, 0.01, 10.0, now)
+        MultiAlarmRuntime.triggerAt(app, "Edappally", 0.0, 0.01, 10.0, now)
+        assertEquals("Edappally", MultiAlarmRuntime.ringing(app)?.id)
+        assertEquals(listOf("Edappally"), MultiAlarmRuntime.live(app)
+            .filter { it.status == "triggered" }.map { it.id })
+    }
+
+    @Test fun backgroundGpsRingsEdappallyBeforeEarlierCreatedFarawayAlarms() {
+        save(entry("Aluva", 0.03), entry("Ambattukavu", 0.02), entry("Edappally", 0.01))
+        MultiAlarmRuntime.checkLocation(app, fix(0.0, 0))
+        MultiAlarmRuntime.checkLocation(app, fix(0.01, 10_000))
+        assertEquals("Edappally", MultiAlarmRuntime.ringing(app)?.id)
+        assertEquals(listOf("Edappally"), MultiAlarmRuntime.live(app)
+            .filter { it.status == "triggered" }.map { it.id })
+    }
+
     @Test fun inaccurateOrOldSegmentsDoNotInferCrossings() {
         assertNull(DestinationCrossing.fraction(fix(-0.0015, 0, 500f), fix(0.0015, 5000), 0.0, 0.0, 100f))
         assertNull(DestinationCrossing.fraction(fix(-0.0015, 0), fix(0.0015, 20_000), 0.0, 0.0, 100f))
@@ -245,6 +265,8 @@ class AlarmRuntimeTest {
         val alarm = entry("backup")
         val now = base + 10_000
         assertNotNull(MultiGeofenceReceiver.verifiedDistance(alarm, fix(0.0, 9_000), now))
+        assertNull(MultiGeofenceReceiver.verifiedDistance(alarm,
+            fix(0.0015, 9_000), now)) // 167 m away is outside this alarm's 100 m radius.
         assertNull(MultiGeofenceReceiver.verifiedDistance(alarm, null, now))
         assertNull(MultiGeofenceReceiver.verifiedDistance(alarm, Location("gps").apply {
             latitude = 0.0
@@ -264,6 +286,14 @@ class AlarmRuntimeTest {
         MultiAlarmReceiver().onReceive(app, Intent("tracker_alarm.MULTI_DISMISS").putExtra("id", "first"))
         assertEquals("second", MultiAlarmRuntime.ringing(app)?.id)
         assertEquals("completed", MultiAlarmRuntime.states(app).first { it["id"] == "first" }["status"])
+    }
+
+    @Test fun aLaterDestinationCanSoundWhileAnEarlierAlertIsUndismissed() {
+        save(entry("Aluva").apply { status = "triggered"; distanceFired = true; triggeredAt = 1_000 },
+            entry("Edappally").apply { status = "triggered"; distanceFired = true; triggeredAt = 61_000 })
+        assertEquals("Edappally", MultiAlarmRuntime.ringing(app)?.id)
+        MultiAlarmRuntime.dismiss(app, "Edappally")
+        assertEquals("Aluva", MultiAlarmRuntime.ringing(app)?.id)
     }
 
     @Test fun monitoringWakeLockIsReleasedWhenServiceEnds() {

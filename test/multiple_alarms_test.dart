@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:tracker_alarm/models/place.dart';
 import 'package:tracker_alarm/models/repeat_schedule.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
@@ -152,6 +153,40 @@ void main() {
     expect(controller.alarms.first.status, 'active');
   });
 
+  test('an old position cannot make the first-created alarm ring', () async {
+    final storage = MemoryStorage();
+    final native = FakeNative();
+    final controller = AlarmController(
+      storage,
+      native,
+      FakeLocation(),
+      HistoryController(storage),
+    );
+    await controller.restore();
+    await controller.start(stationA, 100, true, 'Bell');
+    await controller.start(stationB, 100, true, 'Bell');
+    final secondId = controller.alarms.last.alarm.id;
+    final oldFix = Position(
+      latitude: stationA.latitude,
+      longitude: stationA.longitude,
+      timestamp: DateTime.now().subtract(const Duration(minutes: 1)),
+      accuracy: 10,
+      altitude: 0,
+      altitudeAccuracy: 0,
+      heading: 0,
+      headingAccuracy: 0,
+      speed: 0,
+      speedAccuracy: 0,
+    );
+
+    await controller.checkVisiblePosition(oldFix);
+    expect(native.triggeredIds, isEmpty);
+    await controller.checkVisiblePosition(
+      positionAt(stationB.latitude, stationB.longitude),
+    );
+    expect(native.triggeredIds, [secondId]);
+  });
+
   test('overlapping alert areas ring the closer destination first', () async {
     final storage = MemoryStorage();
     final native = FakeNative();
@@ -202,6 +237,35 @@ void main() {
       expect(controller.active?.id, secondId);
     },
   );
+
+  test('a later arrival is presented while an older alert is still ringing', () async {
+    final storage = MemoryStorage();
+    final native = FakeNative();
+    final controller = AlarmController(
+      storage,
+      native,
+      FakeLocation(),
+      HistoryController(storage),
+    );
+    await controller.restore();
+    await controller.start(stationA, 100, true, 'Bell');
+    await controller.start(stationB, 100, true, 'Bell');
+    final firstId = controller.alarms.first.alarm.id;
+    final secondId = controller.alarms.last.alarm.id;
+    native.entry(firstId)
+      ..['status'] = 'triggered'
+      ..['distanceFired'] = true
+      ..['triggeredAt'] = 1000;
+    native.entry(secondId)
+      ..['status'] = 'triggered'
+      ..['distanceFired'] = true
+      ..['triggeredAt'] = 61000;
+
+    await controller.syncStatus();
+
+    expect(controller.ringingAlarms.first.alarm.id, secondId);
+    expect(controller.active?.id, secondId);
+  });
 
   test(
     'time alert can be dismissed before distance alert on one alarm',
