@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -135,16 +137,23 @@ class TestAlarmActivity : Activity() {
         } else window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(32, 64, 32, 32)
+            setBackgroundColor(Color.BLACK)
             addView(TextView(this@TestAlarmActivity).apply {
                 text = "Test alarm\n\nThis is a preview. Your destination alarms are kept."
                 textSize = 26f
+                setTextColor(Color.WHITE)
             })
             addView(Button(this@TestAlarmActivity).apply {
                 text = "Stop test"
+                setTextColor(Color.BLACK)
+                backgroundTintList = ColorStateList.valueOf(Color.WHITE)
                 setOnClickListener { TestAlarmService.stop(this@TestAlarmActivity); finish() }
             })
         }
-        setContentView(android.widget.ScrollView(this).apply { addView(layout) })
+        setContentView(android.widget.ScrollView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            addView(layout)
+        })
     }
     override fun onResume() { super.onResume(); if (!isFinishing) check.run() }
     override fun onPause() { handler.removeCallbacks(check); super.onPause() }

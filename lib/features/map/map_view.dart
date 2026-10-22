@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -46,8 +47,10 @@ class MapView extends StatefulWidget {
 
 class _MapViewState extends State<MapView> {
   static const _config = MethodChannel('tracker_alarm/google_maps_config');
+  static Future<List<gm.BitmapDescriptor>>? _markerIcons;
   gm.GoogleMapController? controller;
   bool? configured;
+  List<gm.BitmapDescriptor>? markerIcons;
 
   @override
   void dispose() {
@@ -59,6 +62,52 @@ class _MapViewState extends State<MapView> {
   void initState() {
     super.initState();
     _checkConfiguration();
+    _loadMarkerIcons();
+  }
+
+  Future<void> _loadMarkerIcons() async {
+    try {
+      final icons = await (_markerIcons ??= Future.wait([
+        _monochromePin(Colors.white),
+        _monochromePin(const Color(0xFFB5B5B5)),
+        _monochromePin(const Color(0xFFE0E0E0)),
+      ]));
+      if (mounted) setState(() => markerIcons = icons);
+    } catch (_) {
+      _markerIcons = null;
+    }
+  }
+
+  static Future<gm.BitmapDescriptor> _monochromePin(Color fill) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder)..scale(2);
+    final pin = ui.Path()
+      ..moveTo(24, 3)
+      ..cubicTo(12, 3, 4, 12, 4, 24)
+      ..cubicTo(4, 37, 24, 59, 24, 59)
+      ..cubicTo(24, 59, 44, 37, 44, 24)
+      ..cubicTo(44, 12, 36, 3, 24, 3)
+      ..close();
+    canvas.drawPath(pin, Paint()..color = Colors.black);
+    canvas.drawPath(
+      pin,
+      Paint()
+        ..color = fill
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4,
+    );
+    canvas.drawCircle(Offset(24, 24), 7, Paint()..color = fill);
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(96, 128);
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    picture.dispose();
+    if (data == null) throw StateError('Could not draw map marker');
+    return gm.BitmapDescriptor.bytes(
+      data.buffer.asUint8List(),
+      width: 48,
+      height: 64,
+    );
   }
 
   Future<void> _checkConfiguration() async {
@@ -108,42 +157,38 @@ class _MapViewState extends State<MapView> {
   }
 
   Set<gm.Marker> get markers => {
-    for (final place in widget.places)
-      gm.Marker(
-        markerId: gm.MarkerId(
-          place.id ?? '${place.latitude},${place.longitude}',
+    if (markerIcons != null) ...{
+      for (final place in widget.places)
+        gm.Marker(
+          markerId: gm.MarkerId(
+            place.id ?? '${place.latitude},${place.longitude}',
+          ),
+          position: gm.LatLng(place.latitude, place.longitude),
+          icon: markerIcons![2],
+          infoWindow: gm.InfoWindow(title: place.name),
+          onTap: widget.onPlaceTap == null
+              ? null
+              : () => widget.onPlaceTap!(place),
         ),
-        position: gm.LatLng(place.latitude, place.longitude),
-        icon: gm.BitmapDescriptor.defaultMarkerWithHue(
-          gm.BitmapDescriptor.hueOrange,
+      if (widget.position case final position?)
+        gm.Marker(
+          markerId: const gm.MarkerId('current-location'),
+          position: gm.LatLng(position.latitude, position.longitude),
+          icon: markerIcons![1],
         ),
-        infoWindow: gm.InfoWindow(title: place.name),
-        onTap: widget.onPlaceTap == null
-            ? null
-            : () => widget.onPlaceTap!(place),
-      ),
-    if (widget.position case final position?)
-      gm.Marker(
-        markerId: const gm.MarkerId('current-location'),
-        position: gm.LatLng(position.latitude, position.longitude),
-        icon: gm.BitmapDescriptor.defaultMarkerWithHue(
-          gm.BitmapDescriptor.hueYellow,
+      if (widget.destination case final destination?)
+        gm.Marker(
+          markerId: const gm.MarkerId('destination'),
+          position: gm.LatLng(destination.latitude, destination.longitude),
+          icon: markerIcons![0],
+          draggable: widget.onDestinationDrag != null,
+          onDragEnd: widget.onDestinationDrag == null
+              ? null
+              : (point) => widget.onDestinationDrag!(
+                  LatLng(point.latitude, point.longitude),
+                ),
         ),
-      ),
-    if (widget.destination case final destination?)
-      gm.Marker(
-        markerId: const gm.MarkerId('destination'),
-        position: gm.LatLng(destination.latitude, destination.longitude),
-        icon: gm.BitmapDescriptor.defaultMarkerWithHue(
-          gm.BitmapDescriptor.hueRed,
-        ),
-        draggable: widget.onDestinationDrag != null,
-        onDragEnd: widget.onDestinationDrag == null
-            ? null
-            : (point) => widget.onDestinationDrag!(
-                LatLng(point.latitude, point.longitude),
-              ),
-      ),
+    },
   };
 
   @override
@@ -189,9 +234,7 @@ class _MapViewState extends State<MapView> {
                 : 2,
           ),
           mapType: gm.MapType.normal,
-          style: Theme.of(context).brightness == Brightness.dark
-              ? darkMapStyle
-              : null,
+          style: darkMapStyle,
           buildingsEnabled: false,
           trafficEnabled: false,
           indoorViewEnabled: false,

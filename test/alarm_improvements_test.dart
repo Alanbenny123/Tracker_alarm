@@ -280,6 +280,7 @@ void main() {
       await tester.tap(find.text('Duplicate'));
       await tester.pumpAndSettle();
       expect(find.text('Duplicate alarm'), findsOneWidget);
+      await _scrollTo(tester, find.widgetWithText(TextField, 'Commute'));
       expect(find.widgetWithText(TextField, 'Commute'), findsOneWidget);
       await _scrollTo(tester, find.widgetWithText(TextField, '700'));
       expect(find.widgetWithText(TextField, '700'), findsOneWidget);
@@ -327,6 +328,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Edit destination and settings'));
       await tester.pumpAndSettle();
+      await _scrollTo(tester, find.widgetWithText(TextField, 'Commute'));
       await tester.enterText(
         find.widgetWithText(TextField, 'Commute'),
         'Return trip',

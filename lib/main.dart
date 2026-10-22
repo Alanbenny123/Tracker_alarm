@@ -273,55 +273,61 @@ ThemeData createAppTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme =
       ColorScheme.fromSeed(
-        seedColor: const Color(0xFFFF7836),
+        seedColor: dark ? Colors.white : Colors.black,
         brightness: brightness,
       ).copyWith(
-        primary: dark ? const Color(0xFFFF7836) : const Color(0xFFA44120),
-        onPrimary: dark ? const Color(0xFF2B0F04) : Colors.white,
+        primary: dark ? Colors.white : Colors.black,
+        onPrimary: dark ? Colors.black : Colors.white,
         primaryContainer: dark
-            ? const Color(0xFF5B2316)
-            : const Color(0xFFFFD8C4),
-        onPrimaryContainer: dark
-            ? const Color(0xFFFFD3B5)
-            : const Color(0xFF5B1F0E),
-        secondary: dark ? const Color(0xFFE76A50) : const Color(0xFFAC432D),
-        onSecondary: dark ? const Color(0xFF310E09) : Colors.white,
+            ? const Color(0xFF303030)
+            : const Color(0xFFE5E5E5),
+        onPrimaryContainer: dark ? Colors.white : Colors.black,
+        secondary: dark ? const Color(0xFFD0D0D0) : const Color(0xFF303030),
+        onSecondary: dark ? Colors.black : Colors.white,
         secondaryContainer: dark
-            ? const Color(0xFF521B18)
-            : const Color(0xFFFFDAD3),
-        onSecondaryContainer: dark
-            ? const Color(0xFFFFC8BA)
-            : const Color(0xFF611C14),
-        tertiary: dark ? const Color(0xFFFFD16A) : const Color(0xFF885300),
-        onTertiary: dark ? const Color(0xFF332000) : Colors.white,
+            ? const Color(0xFF292929)
+            : const Color(0xFFDEDEDE),
+        onSecondaryContainer: dark ? Colors.white : Colors.black,
+        tertiary: dark ? const Color(0xFFE6E6E6) : const Color(0xFF424242),
+        onTertiary: dark ? Colors.black : Colors.white,
         tertiaryContainer: dark
-            ? const Color(0xFF51350F)
-            : const Color(0xFFFFE3AC),
-        onTertiaryContainer: dark
-            ? const Color(0xFFFFE3A1)
-            : const Color(0xFF4A2C00),
-        error: dark ? const Color(0xFFFF8494) : const Color(0xFFB83E55),
-        onError: dark ? const Color(0xFF530815) : Colors.white,
-        surface: dark ? const Color(0xFF090606) : const Color(0xFFFFF8F3),
-        onSurface: dark ? const Color(0xFFF8EEE6) : const Color(0xFF2C1C16),
-        surfaceContainerLowest: dark ? const Color(0xFF050404) : Colors.white,
-        surfaceContainerLow: dark ? const Color(0xFF17100E) : Colors.white,
+            ? const Color(0xFF303030)
+            : const Color(0xFFD6D6D6),
+        onTertiaryContainer: dark ? Colors.white : Colors.black,
+        error: dark ? Colors.white : Colors.black,
+        onError: dark ? Colors.black : Colors.white,
+        errorContainer: dark
+            ? const Color(0xFF373737)
+            : const Color(0xFFD7D7D7),
+        onErrorContainer: dark ? Colors.white : Colors.black,
+        surface: dark ? const Color(0xFF050505) : const Color(0xFFFFFFFF),
+        onSurface: dark ? const Color(0xFFF5F5F5) : const Color(0xFF101010),
+        surfaceContainerLowest: dark ? Colors.black : Colors.white,
+        surfaceContainerLow: dark
+            ? const Color(0xFF101010)
+            : const Color(0xFFF7F7F7),
         surfaceContainer: dark
-            ? const Color(0xFF211713)
-            : const Color(0xFFF8EBE3),
+            ? const Color(0xFF191919)
+            : const Color(0xFFEFEFEF),
         surfaceContainerHigh: dark
-            ? const Color(0xFF2D1D17)
-            : const Color(0xFFF0DCCF),
+            ? const Color(0xFF242424)
+            : const Color(0xFFE6E6E6),
         surfaceContainerHighest: dark
-            ? const Color(0xFF3C2920)
-            : const Color(0xFFE8CDBD),
+            ? const Color(0xFF303030)
+            : const Color(0xFFDADADA),
         onSurfaceVariant: dark
-            ? const Color(0xFFD1B9A7)
-            : const Color(0xFF705349),
-        outline: dark ? const Color(0xFFA3745B) : const Color(0xFF956A58),
+            ? const Color(0xFFCACACA)
+            : const Color(0xFF4F4F4F),
+        outline: dark ? const Color(0xFFA0A0A0) : const Color(0xFF666666),
         outlineVariant: dark
-            ? const Color(0xFF58382B)
-            : const Color(0xFFDDC0AF),
+            ? const Color(0xFF505050)
+            : const Color(0xFFC6C6C6),
+        inverseSurface: dark ? Colors.white : Colors.black,
+        onInverseSurface: dark ? Colors.black : Colors.white,
+        inversePrimary: dark ? Colors.black : Colors.white,
+        surfaceTint: Colors.transparent,
+        shadow: Colors.black,
+        scrim: Colors.black,
       );
   return ThemeData(
     useMaterial3: true,

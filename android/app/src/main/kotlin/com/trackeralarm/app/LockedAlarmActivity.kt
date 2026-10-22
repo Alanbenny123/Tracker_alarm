@@ -1,6 +1,8 @@
 package com.trackeralarm.app
 
 import android.app.Activity
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -34,12 +36,18 @@ class LockedAlarmActivity : Activity() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(32, 64, 32, 32)
+            setBackgroundColor(Color.BLACK)
         }
-        title = TextView(this).apply { textSize = 26f }
+        title = TextView(this).apply {
+            textSize = 26f
+            setTextColor(Color.WHITE)
+        }
         layout.addView(title)
         fun button(label: String, action: (String) -> Unit) {
             layout.addView(Button(this).apply {
                 text = label
+                setTextColor(Color.BLACK)
+                backgroundTintList = ColorStateList.valueOf(Color.WHITE)
                 setOnClickListener {
                     MultiAlarmRuntime.ringing(this@LockedAlarmActivity)?.let { action(it.id) }
                     handler.removeCallbacks(refresh)
@@ -50,7 +58,10 @@ class LockedAlarmActivity : Activity() {
         button("Stop this alert") { MultiAlarmRuntime.dismiss(this, it) }
         button("Snooze 1 minute") { MultiAlarmRuntime.snooze(this, it, 1) }
         button("End this trip") { MultiAlarmRuntime.finish(this, it, "completed") }
-        setContentView(android.widget.ScrollView(this).apply { addView(layout) })
+        setContentView(android.widget.ScrollView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            addView(layout)
+        })
         MultiAlarmRuntime.setPlaybackResumeRequired(this, false)
         MultiAlarmRuntime.refresh(this)
     }
