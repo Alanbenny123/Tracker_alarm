@@ -71,7 +71,7 @@ class GooglePlacesBridge(private val activity: FlutterActivity, private val mess
                     }
                     val types = when (mode) {
                         "bus" -> listOf("bus_stop", "bus_station")
-                        "metro" -> listOf("subway_station")
+                        "metro" -> listOf("subway_station", "light_rail_station")
                         "railway" -> listOf("train_station")
                         else -> emptyList()
                     }

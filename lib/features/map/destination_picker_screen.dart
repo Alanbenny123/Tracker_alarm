@@ -261,7 +261,19 @@ class _DestinationPickerScreenState
   void _selectResult(Place place) {
     FocusScope.of(context).unfocus();
     if (mode.usesStops) {
-      _loadStops(LatLng(place.latitude, place.longitude), place.name);
+      final name = place.name.toLowerCase();
+      final isNamedStop = switch (mode) {
+        TravelMode.bus => name.contains('bus stop') || name.contains('bus station'),
+        TravelMode.metro => name.contains('metro station') || name.contains('metro stop'),
+        TravelMode.railway =>
+          name.contains('railway station') || name.contains('train station'),
+        TravelMode.other => false,
+      };
+      if (isNamedStop) {
+        _selectStop(place);
+      } else {
+        _loadStops(LatLng(place.latitude, place.longitude), place.name);
+      }
     } else {
       setState(() {
         _cancelLookups();

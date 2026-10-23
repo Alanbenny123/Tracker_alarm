@@ -88,6 +88,31 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('a named metro station from text search can be selected directly', (
+    tester,
+  ) async {
+    final places = _Places();
+    final stops = _Stops();
+    await tester.pumpWidget(_app(places, stops, TravelMode.metro));
+    await tester.pump();
+    stops.requests.single.complete([]);
+    await tester.pump();
+    await tester.enterText(find.byType(TextField), 'Edapally Metro Station');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pump();
+    places.requests.single.complete([
+      stationA.copyWith(name: 'Edapally Metro Station'),
+    ]);
+    await tester.pump();
+
+    await tester.tap(find.text('Edapally Metro Station').last);
+    await tester.pump();
+
+    expect(find.text('Confirm destination'), findsOneWidget);
+    expect(stops.requests, hasLength(1));
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets(
     'shared-place search hides the reported unrelated Canada result',
     (tester) async {
