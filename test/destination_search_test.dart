@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:tracker_alarm/features/map/destination_picker_screen.dart';
 import 'package:tracker_alarm/features/map/map_view.dart';
@@ -10,6 +11,7 @@ import 'package:tracker_alarm/models/place.dart';
 import 'package:tracker_alarm/models/travel_mode.dart';
 import 'package:tracker_alarm/providers/app_providers.dart';
 import 'package:tracker_alarm/services/places_service.dart';
+import 'package:tracker_alarm/services/location_service.dart';
 import 'package:tracker_alarm/services/transit_stops_service.dart';
 
 import 'helpers/alarm_fakes.dart';
@@ -48,7 +50,60 @@ class _Stops extends TransitStopsService {
   void cancel() => cancellations++;
 }
 
+class _RecoveringLocation extends LocationService {
+  int requests = 0;
+
+  @override
+  Future<Position> current() async {
+    requests++;
+    if (requests == 1) {
+      throw const LocationException('GPS not ready yet.');
+    }
+    return positionAt(9.9, 76.7);
+  }
+
+  @override
+  Stream<Position> visibleUpdates() => const Stream.empty();
+}
+
 void main() {
+  testWidgets('nearby retry requests a fresh GPS fix', (tester) async {
+    final location = _RecoveringLocation();
+    final stops = _Stops();
+    await tester.pumpWidget(_pickerWithLocation(location, stops));
+    await tester.pump();
+    expect(location.requests, 1);
+    expect(find.text('GPS not ready yet.'), findsOneWidget);
+
+    await tester.tap(find.text('Retry search'));
+    await tester.pump();
+    expect(location.requests, 2);
+    expect(stops.centers, [const LatLng(9.9, 76.7)]);
+    stops.requests.single.complete([stationA]);
+    await tester.pump();
+    expect(find.text('Station A'), findsWidgets);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('nearby search resumes when GPS becomes available', (
+    tester,
+  ) async {
+    final location = _RecoveringLocation();
+    final controller = LocationController(location);
+    final stops = _Stops();
+    await tester.pumpWidget(_pickerWithLocation(location, stops, controller));
+    await tester.pump();
+    expect(find.text('GPS not ready yet.'), findsOneWidget);
+
+    await controller.refreshAndTrack();
+    await tester.pump();
+    expect(stops.centers, [const LatLng(9.9, 76.7)]);
+    stops.requests.single.complete([]);
+    await tester.pump();
+    expect(find.text('GPS not ready yet.'), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+  });
+
   testWidgets('stop results show distance from the searched center', (
     tester,
   ) async {
@@ -88,30 +143,31 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('a named metro station from text search can be selected directly', (
-    tester,
-  ) async {
-    final places = _Places();
-    final stops = _Stops();
-    await tester.pumpWidget(_app(places, stops, TravelMode.metro));
-    await tester.pump();
-    stops.requests.single.complete([]);
-    await tester.pump();
-    await tester.enterText(find.byType(TextField), 'Edapally Metro Station');
-    await tester.testTextInput.receiveAction(TextInputAction.search);
-    await tester.pump();
-    places.requests.single.complete([
-      stationA.copyWith(name: 'Edapally Metro Station'),
-    ]);
-    await tester.pump();
+  testWidgets(
+    'a named metro station from text search can be selected directly',
+    (tester) async {
+      final places = _Places();
+      final stops = _Stops();
+      await tester.pumpWidget(_app(places, stops, TravelMode.metro));
+      await tester.pump();
+      stops.requests.single.complete([]);
+      await tester.pump();
+      await tester.enterText(find.byType(TextField), 'Edapally Metro Station');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pump();
+      places.requests.single.complete([
+        stationA.copyWith(name: 'Edapally Metro Station'),
+      ]);
+      await tester.pump();
 
-    await tester.tap(find.text('Edapally Metro Station').last);
-    await tester.pump();
+      await tester.tap(find.text('Edapally Metro Station').last);
+      await tester.pump();
 
-    expect(find.text('Confirm destination'), findsOneWidget);
-    expect(stops.requests, hasLength(1));
-    await tester.pumpWidget(const SizedBox());
-  });
+      expect(find.text('Confirm destination'), findsOneWidget);
+      expect(stops.requests, hasLength(1));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'shared-place search hides the reported unrelated Canada result',
@@ -302,6 +358,25 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 }
+
+Widget _pickerWithLocation(
+  _RecoveringLocation location,
+  _Stops stops, [
+  LocationController? controller,
+]) => ProviderScope(
+  overrides: [
+    locationProvider.overrideWith(
+      (ref) => controller ?? LocationController(location),
+    ),
+  ],
+  child: MaterialApp(
+    home: DestinationPickerScreen(
+      initialMode: TravelMode.metro,
+      placesService: _Places(),
+      stopsService: stops,
+    ),
+  ),
+);
 
 Widget _app(
   _Places places,

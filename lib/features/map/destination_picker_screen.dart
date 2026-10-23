@@ -54,6 +54,7 @@ class _DestinationPickerScreenState
   bool searching = false;
   bool sharedResultSelected = false;
   bool loadingStops = false;
+  bool locatingNearby = false;
   String? emptyPlaceQuery;
   bool stopsLoaded = false;
   String? queryHint;
@@ -96,6 +97,7 @@ class _DestinationPickerScreenState
     searching = false;
     sharedResultSelected = false;
     loadingStops = false;
+    locatingNearby = false;
     emptyPlaceQuery = null;
     stopsLoaded = false;
     queryHint = null;
@@ -175,20 +177,38 @@ class _DestinationPickerScreenState
     if (next.usesStops) _loadNearby();
   }
 
-  void _loadNearby() {
-    final position = ref.read(locationProvider).position;
-    if (position == null) {
-      setState(() {
-        _cancelLookups();
-        results = [];
-        stops = [];
-        selected = null;
-        error = 'Waiting for GPS. Search an area, or try nearby again.';
-        errorSource = _SearchErrorSource.nearby;
-      });
+  Future<void> _loadNearby() async {
+    final location = ref.read(locationProvider);
+    final position = location.position;
+    if (position != null) {
+      _loadStops(LatLng(position.latitude, position.longitude), 'Near me');
       return;
     }
-    _loadStops(LatLng(position.latitude, position.longitude), 'Near me');
+
+    _cancelLookups();
+    final generation = searchGeneration;
+    setState(() {
+      results = [];
+      stops = [];
+      selected = null;
+      locatingNearby = true;
+      error = null;
+      errorSource = null;
+    });
+    await location.refreshAndTrack();
+    if (!mounted || generation != searchGeneration || !mode.usesStops) return;
+    final refreshed = location.position;
+    if (refreshed != null) {
+      _loadStops(LatLng(refreshed.latitude, refreshed.longitude), 'Near me');
+    } else {
+      setState(() {
+        locatingNearby = false;
+        error =
+            location.error ??
+            'Waiting for GPS. Search an area, or try nearby again.';
+        errorSource = _SearchErrorSource.nearby;
+      });
+    }
   }
 
   void _searchMapArea() {
@@ -263,8 +283,10 @@ class _DestinationPickerScreenState
     if (mode.usesStops) {
       final name = place.name.toLowerCase();
       final isNamedStop = switch (mode) {
-        TravelMode.bus => name.contains('bus stop') || name.contains('bus station'),
-        TravelMode.metro => name.contains('metro station') || name.contains('metro stop'),
+        TravelMode.bus =>
+          name.contains('bus stop') || name.contains('bus station'),
+        TravelMode.metro =>
+          name.contains('metro station') || name.contains('metro stop'),
         TravelMode.railway =>
           name.contains('railway station') || name.contains('train station'),
         TravelMode.other => false,
@@ -334,6 +356,15 @@ class _DestinationPickerScreenState
   @override
   Widget build(BuildContext context) {
     final position = ref.watch(locationProvider).position;
+    ref.listen(locationProvider, (_, next) {
+      final fix = next.position;
+      if (fix != null &&
+          mode.usesStops &&
+          (locatingNearby || errorSource == _SearchErrorSource.nearby) &&
+          searchController.text.trim().isEmpty) {
+        _loadStops(LatLng(fix.latitude, fix.longitude), 'Near me');
+      }
+    });
     final radius = mode.defaultAlertRadius;
     final showStopsPanel =
         mode.usesStops &&
@@ -440,7 +471,13 @@ class _DestinationPickerScreenState
                             ),
                           const LinearProgressIndicator(),
                         ],
-                        if (loadingStops) const LinearProgressIndicator(),
+                        if (locatingNearby)
+                          const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: Text('Getting your location…'),
+                          ),
+                        if (loadingStops || locatingNearby)
+                          const LinearProgressIndicator(),
                         if (transitNotice != null)
                           Padding(
                             padding: const EdgeInsets.all(12),
@@ -557,8 +594,13 @@ class _DestinationPickerScreenState
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Text(
-                                            loadingStops
+                                            locatingNearby
+                                                ? 'Getting your location…'
+                                                : loadingStops
                                                 ? 'Finding mapped stops…'
+                                                : errorSource ==
+                                                      _SearchErrorSource.nearby
+                                                ? 'Current location unavailable. Search for an area or retry.'
                                                 : error != null
                                                 ? 'Could not load stops in this area.'
                                                 : !stopsLoaded
