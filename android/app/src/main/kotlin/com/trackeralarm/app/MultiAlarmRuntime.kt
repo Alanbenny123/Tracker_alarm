@@ -675,8 +675,10 @@ object MultiAlarmRuntime {
         checkDue(context)
         if (System.currentTimeMillis() - location.time !in 0..30_000L) return 30_000L
         if (!LocationEvidence.validCoordinates(location)) return 5_000L
-        val previous = previousFix
-        previousFix = Location(location)
+        // Providers can deliver fixes out of order. An older precise GPS fix can
+        // still prove arrival, but must not create a backwards travel segment.
+        val previous = previousFix?.takeIf { location.time >= it.time }
+        if (previous != null || previousFix == null) previousFix = Location(location)
         val entries = live(context)
         if (entries.none { !it.distanceFired && it.distanceReady(System.currentTimeMillis()) }) {
             return 30 * 60_000L

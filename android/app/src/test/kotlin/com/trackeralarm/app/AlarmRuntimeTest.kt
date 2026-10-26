@@ -202,6 +202,33 @@ class AlarmRuntimeTest {
             .filter { it.status == "triggered" }.map { it.id })
     }
 
+    @Test fun gpsServiceChecksEveryDestinationWithoutNetworkProvider() {
+        save(entry("Aluva", 0.03), entry("Ambattukavu", 0.02), entry("Edappally", 0.01))
+        val manager = app.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        shadowOf(manager).setProviderEnabled(LocationManager.NETWORK_PROVIDER, false)
+        val controller = Robolectric.buildService(MultiTrackingService::class.java)
+            .create().startCommand(0, 1)
+        try {
+            shadowOf(manager).simulateLocation(fix(0.0, 0))
+            shadowOf(Looper.getMainLooper()).idle()
+            shadowOf(manager).simulateLocation(fix(0.01, 10_000))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals("Edappally", MultiAlarmRuntime.ringing(app)?.id)
+            assertEquals(listOf("Edappally"), MultiAlarmRuntime.live(app)
+                .filter { it.status == "triggered" }.map { it.id })
+        } finally { controller.destroy() }
+    }
+
+    @Test fun anOlderPreciseFixCanProveArrivalWithoutReversingTravelHistory() {
+        save(entry("older", 0.02), entry("next", 0.01))
+        MultiAlarmRuntime.checkLocation(app, fix(0.0, 8_000))
+        MultiAlarmRuntime.checkLocation(app, fix(0.02, 5_000))
+        assertEquals("older", MultiAlarmRuntime.ringing(app)?.id)
+        MultiAlarmRuntime.checkLocation(app, fix(0.01, 9_000))
+        assertEquals(setOf("older", "next"), MultiAlarmRuntime.live(app)
+            .filter { it.status == "triggered" }.map { it.id }.toSet())
+    }
+
     @Test fun inaccurateOrOldSegmentsDoNotInferCrossings() {
         assertNull(DestinationCrossing.fraction(fix(-0.0015, 0, 500f), fix(0.0015, 5000), 0.0, 0.0, 100f))
         assertNull(DestinationCrossing.fraction(fix(-0.0015, 0), fix(0.0015, 20_000), 0.0, 0.0, 100f))

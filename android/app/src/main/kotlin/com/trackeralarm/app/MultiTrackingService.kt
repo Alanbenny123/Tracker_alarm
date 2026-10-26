@@ -14,8 +14,13 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
 
-/** One foreground GPS subscription monitors every active destination. */
+/** One foreground service monitors every active destination using fresh location fixes. */
 class MultiTrackingService : Service() {
     companion object {
         private const val TAG = "MultiTrackingService"
@@ -57,16 +62,16 @@ class MultiTrackingService : Service() {
             val age = if (service.lastFixElapsed == 0L) Long.MAX_VALUE else
                 SystemClock.elapsedRealtime() - service.lastFixElapsed
             val problem = when {
-                !service.gpsEnabled() -> "GPS is off. Turn on location services."
-                service.interval == 0L -> "GPS subscription failed. Check location permissions."
-                age > WAKE_TIMEOUT_MS -> "Waiting for a fresh GPS fix."
-                service.lastAccuracy == Float.MAX_VALUE -> "Waiting for GPS accuracy before alerting."
+                !service.locationEnabled() -> "Location is off. Turn on location services."
+                service.interval == 0L -> "Location subscription failed. Check location permissions."
+                age > WAKE_TIMEOUT_MS -> "Waiting for a fresh location fix."
+                service.lastAccuracy == Float.MAX_VALUE -> "Waiting for location accuracy before alerting."
                 !LocationEvidence.usableAccuracy(service.lastAccuracy, smallestRadius) ->
-                    "GPS accuracy is too wide for the ${smallestRadius.toInt()} m alert radius. Waiting for a better fix."
+                    "Location accuracy is too wide for the ${smallestRadius.toInt()} m alert radius. Waiting for a better fix."
                 else -> null
             }
             return fix + mapOf(
-                "monitoringMessage" to (problem ?: "GPS monitoring active · last fix ${age / 1000} s ago"),
+                "monitoringMessage" to (problem ?: "Location monitoring active · last fix ${age / 1000} s ago"),
                 "monitoringHealthy" to (problem == null),
                 "gpsStatus" to if (problem != null) problem else when {
                     service.lastAccuracy <= 20f -> "Excellent"
@@ -84,6 +89,7 @@ class MultiTrackingService : Service() {
     }
 
     private val locationManager by lazy { getSystemService(Context.LOCATION_SERVICE) as LocationManager }
+    private val fusedLocation by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private val sound by lazy { AlarmSoundPlayer(this) }
     private val handler = Handler(Looper.getMainLooper())
     private val monitoringWakeLock by lazy {
@@ -92,6 +98,9 @@ class MultiTrackingService : Service() {
             .apply { setReferenceCounted(false) }
     }
     private var interval = 0L
+    private var gpsRequested = false
+    private var fusedGeneration = 0
+    private var fusedCallback: LocationCallback? = null
     private var ringingId: String? = null
     private var lastFixElapsed = 0L
     private var lastFixAt = 0L
@@ -102,7 +111,7 @@ class MultiTrackingService : Service() {
             MultiAlarmRuntime.checkDue(this@MultiTrackingService)
             if (!syncRuntime()) return
             // Recover a stalled GPS subscription without relying on Flutter or unlocking.
-            if (interval != 0L && gpsEnabled() &&
+            if (interval != 0L && locationEnabled() &&
                 SystemClock.elapsedRealtime() - maxOf(lastFixElapsed, lastRequestElapsed) >= WAKE_TIMEOUT_MS) {
                 requestUpdates(5_000L)
             }
@@ -111,16 +120,7 @@ class MultiTrackingService : Service() {
     }
     private val listener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
-            if (System.currentTimeMillis() - location.time in 0..30_000L &&
-                LocationEvidence.validCoordinates(location)) {
-                lastFixElapsed = SystemClock.elapsedRealtime()
-                lastFixAt = location.time
-                lastAccuracy = if (location.hasAccuracy() && location.accuracy.isFinite() &&
-                    location.accuracy >= 0f) location.accuracy else Float.MAX_VALUE
-            }
-            val wanted = MultiAlarmRuntime.checkLocation(this@MultiTrackingService, location)
-            if (wanted <= 30_000L && wanted != interval) requestUpdates(wanted)
-            syncRuntime()
+            handleLocation(location)
         }
         override fun onProviderDisabled(provider: String) {
             if (provider == LocationManager.GPS_PROVIDER) {
@@ -133,6 +133,22 @@ class MultiTrackingService : Service() {
                 syncRuntime()
             }
         }
+    }
+    private fun handleLocation(location: Location) {
+        val accuracy = if (location.hasAccuracy() && location.accuracy.isFinite() &&
+            location.accuracy >= 0f) location.accuracy else Float.MAX_VALUE
+        val improvesRecentFix = location.time < lastFixAt &&
+            lastFixAt - location.time <= 10_000L && accuracy < lastAccuracy
+        if (System.currentTimeMillis() - location.time in 0..30_000L &&
+            LocationEvidence.validCoordinates(location) &&
+            (location.time >= lastFixAt || improvesRecentFix)) {
+            lastFixElapsed = SystemClock.elapsedRealtime()
+            lastFixAt = maxOf(lastFixAt, location.time)
+            lastAccuracy = accuracy
+        }
+        val wanted = MultiAlarmRuntime.checkLocation(this, location)
+        if (wanted <= 30_000L && wanted != interval) requestUpdates(wanted)
+        syncRuntime()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -210,7 +226,7 @@ class MultiTrackingService : Service() {
         if (distanceActive) {
             if (interval == 0L) requestUpdates(5_000L)
         } else stopUpdates()
-        if (distanceActive && interval != 0L && gpsEnabled()) {
+        if (distanceActive && interval != 0L && locationEnabled()) {
             // Renew a bounded CPU lock only while a destination needs GPS today.
             // Future repeat days and time-only waiting do not keep the CPU awake.
             monitoringWakeLock.acquire(WAKE_TIMEOUT_MS)
@@ -218,8 +234,10 @@ class MultiTrackingService : Service() {
         return true
     }
 
-    private fun gpsEnabled(): Boolean = try {
-        locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    private fun locationEnabled(): Boolean = try {
+        if (Build.VERSION.SDK_INT >= 28)
+            locationManager.isLocationEnabled || locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+        else locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
     } catch (e: Exception) {
         Log.w(TAG, "Could not read GPS state", e)
         false
@@ -228,13 +246,51 @@ class MultiTrackingService : Service() {
     @Suppress("DEPRECATION")
     private fun requestUpdates(wanted: Long) {
         stopUpdates()
+        var requested = false
         try {
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
                 wanted, 0f, listener, Looper.getMainLooper())
-            interval = wanted
-            lastRequestElapsed = SystemClock.elapsedRealtime()
+            gpsRequested = true
+            requested = true
         } catch (e: Exception) {
             Log.e(TAG, "Could not subscribe to background GPS", e)
+        }
+        val generation = ++fusedGeneration
+        try {
+            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, wanted)
+                .setMinUpdateIntervalMillis(1_000L)
+                .setMaxUpdateDelayMillis(0L)
+                .build()
+            val callback = object : LocationCallback() {
+                override fun onLocationResult(result: LocationResult) {
+                    result.locations.forEach { location ->
+                        if (generation == fusedGeneration) handleLocation(location)
+                    }
+                }
+            }
+            fusedCallback = callback
+            fusedLocation.requestLocationUpdates(request, callback, Looper.getMainLooper())
+                .addOnSuccessListener {
+                    if (generation != fusedGeneration) {
+                        try { fusedLocation.removeLocationUpdates(callback) } catch (_: Exception) { }
+                    }
+                }
+                .addOnFailureListener { error ->
+                    if (generation == fusedGeneration) {
+                        fusedCallback = null
+                        Log.w(TAG, "Fused location backup unavailable", error)
+                        if (!gpsRequested) interval = 0L
+                    }
+                }
+            requested = true
+        } catch (e: Exception) {
+            fusedCallback = null
+            Log.w(TAG, "Could not subscribe to fused location backup", e)
+        }
+        if (requested) {
+            interval = wanted
+            lastRequestElapsed = SystemClock.elapsedRealtime()
+        } else {
             releaseWakeLock()
             AlarmNotifications.notifications(this).notify(MultiAlarmRuntime.TRACKING_ID,
                 MultiAlarmRuntime.trackingNotification(this, MultiAlarmRuntime.live(this).size))
@@ -242,9 +298,15 @@ class MultiTrackingService : Service() {
     }
 
     private fun stopUpdates() {
-        if (interval != 0L) {
+        fusedGeneration++
+        if (gpsRequested) {
             try { locationManager.removeUpdates(listener) } catch (_: Exception) { }
         }
+        fusedCallback?.let { callback ->
+            try { fusedLocation.removeLocationUpdates(callback) } catch (_: Exception) { }
+        }
+        fusedCallback = null
+        gpsRequested = false
         interval = 0L
     }
 
