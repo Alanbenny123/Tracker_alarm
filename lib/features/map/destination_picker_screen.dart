@@ -8,6 +8,8 @@ import '../../models/place.dart';
 import '../../models/shared_place_search_args.dart';
 import '../../models/travel_mode.dart';
 import '../../providers/app_providers.dart';
+import '../../providers/offline_packs_provider.dart';
+import '../../services/offline_pack_store.dart';
 import '../../widgets/dashboard_panel.dart';
 import '../../services/places_service.dart';
 import '../../services/transit_stops_service.dart';
@@ -59,6 +61,59 @@ class _DestinationPickerScreenState
   bool stopsLoaded = false;
   String? queryHint;
   String? transitNotice;
+  bool offlineMode = false;
+  OfflinePack? selectedOfflinePack;
+
+  OfflinePack? _packForCurrentArea(OfflinePacksController packs) {
+    if (!offlineMode || packs.packs.isEmpty) return null;
+    final selected = selectedOfflinePack;
+    if (selected != null && packs.packs.any((pack) => pack.id == selected.id)) {
+      return packs.packs.firstWhere((pack) => pack.id == selected.id);
+    }
+    final position = ref.read(locationProvider).position;
+    final point =
+        areaCenter ??
+        (position == null
+            ? null
+            : LatLng(position.latitude, position.longitude));
+    return point == null
+        ? packs.packs.first
+        : packs.covering(point.latitude, point.longitude) ?? packs.packs.first;
+  }
+
+  void _useOfflinePack(OfflinePack pack) {
+    setState(() {
+      _cancelLookups();
+      offlineMode = true;
+      selectedOfflinePack = pack;
+      selected = null;
+      stops = [];
+      results = [];
+      error = null;
+      errorSource = null;
+      areaCenter = LatLng(
+        (pack.south + pack.north) / 2,
+        (pack.west + pack.east) / 2,
+      );
+      areaName = pack.name;
+    });
+    if (mode.usesStops) _loadStops(areaCenter!, pack.name);
+  }
+
+  void _useOnlineMap() {
+    setState(() {
+      _cancelLookups();
+      offlineMode = false;
+      selected = null;
+      stops = [];
+      results = [];
+      error = null;
+      errorSource = null;
+      areaCenter = null;
+      areaName = null;
+    });
+    if (mode.usesStops) _loadNearby();
+  }
 
   @override
   void initState() {
@@ -133,11 +188,20 @@ class _DestinationPickerScreenState
     if (text.length < 3) return;
     try {
       final position = ref.read(locationProvider).position;
-      final received = await placesService.search(
-        text,
-        latitude: position?.latitude,
-        longitude: position?.longitude,
-      );
+      final received = offlineMode
+          ? await ref
+                .read(offlinePacksProvider)
+                .search(
+                  text,
+                  near: position == null
+                      ? areaCenter
+                      : LatLng(position.latitude, position.longitude),
+                )
+          : await placesService.search(
+              text,
+              latitude: position?.latitude,
+              longitude: position?.longitude,
+            );
       final found = widget.sharedPlace
           ? received.where(SharedPlaceSearchArgs(text).matches).toList()
           : received;
@@ -151,6 +215,31 @@ class _DestinationPickerScreenState
       });
     } catch (e) {
       if (!mounted || generation != searchGeneration) return;
+      await ref.read(offlinePacksProvider).load();
+      if (!mounted || generation != searchGeneration) return;
+      if (!offlineMode && ref.read(offlinePacksProvider).packs.isNotEmpty) {
+        try {
+          final offline = await ref.read(offlinePacksProvider).search(text);
+          final matching = widget.sharedPlace
+              ? offline.where(SharedPlaceSearchArgs(text).matches).toList()
+              : offline;
+          if (!mounted || generation != searchGeneration) return;
+          if (matching.isNotEmpty) {
+            setState(() {
+              offlineMode = true;
+              results = matching;
+              selectedOfflinePack = ref
+                  .read(offlinePacksProvider)
+                  .covering(matching.first.latitude, matching.first.longitude);
+              searching = false;
+              transitNotice = 'Using downloaded offline places.';
+            });
+            return;
+          }
+        } catch (_) {
+          // Keep the original online error visible if the pack is damaged.
+        }
+      }
       setState(() {
         error = e.toString();
         errorSource = _SearchErrorSource.place;
@@ -174,7 +263,17 @@ class _DestinationPickerScreenState
       searchController.clear();
       _cancelLookups();
     });
-    if (next.usesStops) _loadNearby();
+    if (next.usesStops) {
+      if (offlineMode && selectedOfflinePack != null) {
+        final pack = selectedOfflinePack!;
+        _loadStops(
+          LatLng((pack.south + pack.north) / 2, (pack.west + pack.east) / 2),
+          pack.name,
+        );
+      } else {
+        _loadNearby();
+      }
+    }
   }
 
   Future<void> _loadNearby() async {
@@ -235,24 +334,57 @@ class _DestinationPickerScreenState
       errorSource = null;
     });
     try {
-      final found = await stopsService.nearby(
-        mode,
-        center.latitude,
-        center.longitude,
-      );
+      if (offlineMode &&
+          ref
+                  .read(offlinePacksProvider)
+                  .covering(center.latitude, center.longitude) ==
+              null) {
+        throw StateError(
+          'No downloaded offline map covers this area. Choose another region or use Google online.',
+        );
+      }
+      final found = offlineMode
+          ? await ref.read(offlinePacksProvider).nearby(mode, center)
+          : await stopsService.nearby(mode, center.latitude, center.longitude);
       if (!mounted || generation != searchGeneration) return;
       setState(() {
         stops = found;
         loadingStops = false;
         stopsLoaded = true;
         transitNotice =
-            stopsService.notice ??
+            (offlineMode
+                ? 'Showing downloaded OpenStreetMap stops.'
+                : stopsService.notice) ??
             (found.length >= 20
                 ? 'Showing the 20 closest results. Search a smaller area or search for a stop by name to find others.'
                 : null);
       });
     } catch (e) {
       if (!mounted || generation != searchGeneration) return;
+      await ref.read(offlinePacksProvider).load();
+      if (!mounted || generation != searchGeneration) return;
+      final availablePack = ref
+          .read(offlinePacksProvider)
+          .covering(center.latitude, center.longitude);
+      if (!offlineMode && availablePack != null) {
+        try {
+          final found = await ref
+              .read(offlinePacksProvider)
+              .nearby(mode, center);
+          if (!mounted || generation != searchGeneration) return;
+          setState(() {
+            offlineMode = true;
+            selectedOfflinePack = availablePack;
+            stops = found;
+            loadingStops = false;
+            stopsLoaded = true;
+            transitNotice = 'Using downloaded offline stops.';
+          });
+          return;
+        } catch (_) {
+          // Keep the original online error visible if the pack is damaged.
+        }
+      }
       setState(() {
         error = e.toString();
         errorSource = _SearchErrorSource.stops;
@@ -280,6 +412,11 @@ class _DestinationPickerScreenState
 
   void _selectResult(Place place) {
     FocusScope.of(context).unfocus();
+    if (offlineMode) {
+      selectedOfflinePack = ref
+          .read(offlinePacksProvider)
+          .covering(place.latitude, place.longitude);
+    }
     if (mode.usesStops) {
       final name = place.name.toLowerCase();
       final isNamedStop = switch (mode) {
@@ -312,6 +449,11 @@ class _DestinationPickerScreenState
     FocusScope.of(context).unfocus();
     setState(() {
       _cancelLookups();
+      if (offlineMode) {
+        selectedOfflinePack = ref
+            .read(offlinePacksProvider)
+            .covering(place.latitude, place.longitude);
+      }
       selected = place;
       results = [];
       error = null;
@@ -356,6 +498,8 @@ class _DestinationPickerScreenState
   @override
   Widget build(BuildContext context) {
     final position = ref.watch(locationProvider).position;
+    final offlinePacks = ref.watch(offlinePacksProvider);
+    final offlinePack = _packForCurrentArea(offlinePacks);
     ref.listen(locationProvider, (_, next) {
       final fix = next.position;
       if (fix != null &&
@@ -382,6 +526,7 @@ class _DestinationPickerScreenState
             child: Stack(
               children: [
                 MapView(
+                  offlinePack: offlinePack,
                   position: position,
                   destination: selected,
                   areaCenter: areaCenter,
@@ -420,24 +565,71 @@ class _DestinationPickerScreenState
                         ),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: TravelMode.values
-                                  .map(
-                                    (option) => Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 3,
-                                      ),
-                                      child: ChoiceChip(
-                                        label: Text(option.label),
-                                        selected: mode == option,
-                                        onSelected: (_) => _changeMode(option),
-                                      ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: TravelMode.values
+                                        .map(
+                                          (option) => Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 3,
+                                            ),
+                                            child: ChoiceChip(
+                                              label: Text(option.label),
+                                              selected: mode == option,
+                                              onSelected: (_) =>
+                                                  _changeMode(option),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                  ),
+                                ),
+                              ),
+                              PopupMenuButton<String>(
+                                tooltip: 'Map source and offline maps',
+                                onSelected: (value) {
+                                  if (value == 'manage') {
+                                    context.push('/offline-maps');
+                                  } else if (value == 'online') {
+                                    _useOnlineMap();
+                                  } else {
+                                    final pack = offlinePacks.packs.firstWhere(
+                                      (pack) => pack.id == value.substring(5),
+                                    );
+                                    _useOfflinePack(pack);
+                                  }
+                                },
+                                itemBuilder: (_) => [
+                                  const PopupMenuItem(
+                                    value: 'online',
+                                    child: Text('Google Maps · online'),
+                                  ),
+                                  for (final pack in offlinePacks.packs)
+                                    PopupMenuItem(
+                                      value: 'pack:${pack.id}',
+                                      child: Text('${pack.name} · offline'),
                                     ),
-                                  )
-                                  .toList(),
-                            ),
+                                  const PopupMenuItem(
+                                    value: 'manage',
+                                    child: Text('Download offline maps'),
+                                  ),
+                                ],
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  child: Icon(
+                                    offlineMode
+                                        ? Icons.offline_pin_outlined
+                                        : Icons.layers_outlined,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                         TextField(

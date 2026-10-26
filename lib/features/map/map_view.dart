@@ -3,11 +3,13 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart' as fm;
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gm;
 import 'package:latlong2/latlong.dart';
 
 import '../../models/place.dart';
+import '../../services/offline_pack_store.dart';
 import 'dark_map_style.dart';
 
 class MapView extends StatefulWidget {
@@ -25,6 +27,7 @@ class MapView extends StatefulWidget {
     this.interactive = true,
     this.compactPlaceholder = false,
     this.attributionBottomInset = 0,
+    this.offlinePack,
   });
   final Position? position;
   final Place? destination;
@@ -40,6 +43,7 @@ class MapView extends StatefulWidget {
 
   /// Moves the SDK's Google logo above any panel drawn over the map.
   final double attributionBottomInset;
+  final OfflinePack? offlinePack;
 
   @override
   State<MapView> createState() => _MapViewState();
@@ -61,8 +65,10 @@ class _MapViewState extends State<MapView> {
   @override
   void initState() {
     super.initState();
-    _checkConfiguration();
-    _loadMarkerIcons();
+    if (widget.offlinePack == null) {
+      _checkConfiguration();
+      _loadMarkerIcons();
+    }
   }
 
   Future<void> _loadMarkerIcons() async {
@@ -138,6 +144,15 @@ class _MapViewState extends State<MapView> {
   @override
   void didUpdateWidget(covariant MapView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.offlinePack == null && widget.offlinePack != null) {
+      controller?.dispose();
+      controller = null;
+    }
+    if (oldWidget.offlinePack != null && widget.offlinePack == null) {
+      _checkConfiguration();
+      _loadMarkerIcons();
+    }
+    if (widget.offlinePack != null) return;
     if (center != _center(oldWidget)) {
       final target = center;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -193,6 +208,22 @@ class _MapViewState extends State<MapView> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.offlinePack case final pack?) {
+      return _OfflineMapView(
+        key: ValueKey(pack.id),
+        pack: pack,
+        position: widget.position,
+        destination: widget.destination,
+        areaCenter: widget.areaCenter,
+        places: widget.places,
+        radius: widget.radius,
+        onTap: widget.onTap,
+        onPlaceTap: widget.onPlaceTap,
+        onCameraMove: widget.onCameraMove,
+        interactive: widget.interactive,
+        attributionBottomInset: widget.attributionBottomInset,
+      );
+    }
     if (configured != true) {
       return Center(
         child: Padding(
@@ -306,6 +337,220 @@ class _MapViewState extends State<MapView> {
   void _animate(gm.CameraUpdate update) {
     final map = controller;
     if (map != null) unawaited(map.animateCamera(update));
+  }
+}
+
+class _OfflineMapView extends StatefulWidget {
+  const _OfflineMapView({
+    super.key,
+    required this.pack,
+    this.position,
+    this.destination,
+    this.areaCenter,
+    required this.places,
+    required this.radius,
+    this.onTap,
+    this.onPlaceTap,
+    this.onCameraMove,
+    required this.interactive,
+    required this.attributionBottomInset,
+  });
+
+  final OfflinePack pack;
+  final Position? position;
+  final Place? destination;
+  final LatLng? areaCenter;
+  final List<Place> places;
+  final double radius;
+  final void Function(LatLng)? onTap;
+  final void Function(Place)? onPlaceTap;
+  final ValueChanged<LatLng>? onCameraMove;
+  final bool interactive;
+  final double attributionBottomInset;
+
+  @override
+  State<_OfflineMapView> createState() => _OfflineMapViewState();
+}
+
+class _OfflineMapViewState extends State<_OfflineMapView> {
+  final controller = fm.MapController();
+
+  LatLng get center {
+    if (widget.destination case final place?) {
+      return LatLng(place.latitude, place.longitude);
+    }
+    if (widget.areaCenter case final point?) return point;
+    if (widget.position case final position?) {
+      return LatLng(position.latitude, position.longitude);
+    }
+    return LatLng(
+      (widget.pack.south + widget.pack.north) / 2,
+      (widget.pack.west + widget.pack.east) / 2,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _OfflineMapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (center != _centerOf(oldWidget)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) controller.move(center, controller.camera.zoom);
+      });
+    }
+  }
+
+  LatLng _centerOf(_OfflineMapView view) {
+    if (view.destination case final place?) {
+      return LatLng(place.latitude, place.longitude);
+    }
+    if (view.areaCenter case final point?) return point;
+    if (view.position case final position?) {
+      return LatLng(position.latitude, position.longitude);
+    }
+    return LatLng(
+      (view.pack.south + view.pack.north) / 2,
+      (view.pack.west + view.pack.east) / 2,
+    );
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = Theme.of(context).colorScheme.primary;
+    final initialZoom = widget.destination != null ? 15.0 : 12.0;
+    final zoom = initialZoom.clamp(
+      widget.pack.minZoom.toDouble(),
+      widget.pack.maxZoom.toDouble(),
+    );
+    return Stack(
+      children: [
+        fm.FlutterMap(
+          mapController: controller,
+          options: fm.MapOptions(
+            initialCenter: center,
+            initialZoom: zoom,
+            minZoom: widget.pack.minZoom.toDouble(),
+            maxZoom: widget.pack.maxZoom.toDouble(),
+            interactionOptions: fm.InteractionOptions(
+              flags: widget.interactive
+                  ? fm.InteractiveFlag.all
+                  : fm.InteractiveFlag.none,
+            ),
+            onTap: widget.interactive && widget.onTap != null
+                ? (_, point) => widget.onTap!(point)
+                : null,
+            onPositionChanged: (camera, _) =>
+                widget.onCameraMove?.call(camera.center),
+          ),
+          children: [
+            fm.TileLayer(
+              urlTemplate: widget.pack.tileTemplate,
+              tileProvider: fm.FileTileProvider(),
+              minNativeZoom: widget.pack.minZoom,
+              maxNativeZoom: widget.pack.maxZoom,
+            ),
+            if (widget.destination case final destination?)
+              fm.CircleLayer(
+                circles: [
+                  fm.CircleMarker(
+                    point: LatLng(destination.latitude, destination.longitude),
+                    radius: widget.radius,
+                    useRadiusInMeter: true,
+                    color: color.withValues(alpha: 0.15),
+                    borderColor: color,
+                    borderStrokeWidth: 2,
+                  ),
+                ],
+              ),
+            fm.MarkerLayer(
+              markers: [
+                for (final place in widget.places)
+                  fm.Marker(
+                    point: LatLng(place.latitude, place.longitude),
+                    width: 42,
+                    height: 42,
+                    child: IconButton(
+                      tooltip: place.name,
+                      onPressed: widget.onPlaceTap == null
+                          ? null
+                          : () => widget.onPlaceTap!(place),
+                      icon: const Icon(Icons.place),
+                    ),
+                  ),
+                if (widget.position case final position?)
+                  fm.Marker(
+                    point: LatLng(position.latitude, position.longitude),
+                    width: 36,
+                    height: 36,
+                    child: const Icon(Icons.my_location, color: Colors.blue),
+                  ),
+                if (widget.destination case final destination?)
+                  fm.Marker(
+                    point: LatLng(destination.latitude, destination.longitude),
+                    width: 42,
+                    height: 42,
+                    child: Icon(Icons.location_on, color: color, size: 36),
+                  ),
+              ],
+            ),
+          ],
+        ),
+        Positioned(
+          left: 8,
+          bottom: widget.attributionBottomInset + 8,
+          child: ColoredBox(
+            color: Theme.of(context).colorScheme.surface
+                .withValues(alpha: 0.85),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '© OpenStreetMap contributors · ODbL',
+                style: TextStyle(fontSize: 10),
+              ),
+            ),
+          ),
+        ),
+        if (widget.interactive)
+          Positioned(
+            right: 12,
+            top: 12,
+            child: Column(
+              children: [
+                _MapButton(
+                  icon: Icons.add,
+                  onTap: () => controller.move(
+                    controller.camera.center,
+                    controller.camera.zoom + 1,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _MapButton(
+                  icon: Icons.remove,
+                  onTap: () => controller.move(
+                    controller.camera.center,
+                    controller.camera.zoom - 1,
+                  ),
+                ),
+                if (widget.position case final position?) ...[
+                  const SizedBox(height: 6),
+                  _MapButton(
+                    icon: Icons.my_location,
+                    onTap: () => controller.move(
+                      LatLng(position.latitude, position.longitude),
+                      controller.camera.zoom,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }
 

@@ -9,6 +9,7 @@ import 'features/alarm/alarm_screens.dart';
 import 'features/home/home_screen.dart';
 import 'features/help/guide_screen.dart';
 import 'features/map/destination_picker_screen.dart';
+import 'features/map/offline_maps_screen.dart';
 import 'models/alarm_setup_args.dart';
 import 'models/place.dart';
 import 'models/shared_place_search_args.dart';
@@ -53,6 +54,10 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
         ),
       ),
       GoRoute(path: '/guide', builder: (context, state) => const GuideScreen()),
+      GoRoute(
+        path: '/offline-maps',
+        builder: (context, state) => const OfflineMapsScreen(),
+      ),
       GoRoute(
         path: '/pick',
         builder: (context, state) => DestinationPickerScreen(

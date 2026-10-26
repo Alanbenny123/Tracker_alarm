@@ -884,6 +884,13 @@ class _SettingsTab extends ConsumerWidget {
             title: Text('Map type'),
             subtitle: Text('Google Maps · standard 2D map'),
           ),
+          ListTile(
+            leading: const Icon(Icons.offline_pin_outlined),
+            title: const Text('Offline maps'),
+            subtitle: const Text('Download and manage regional map packs'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/offline-maps'),
+          ),
           const SizedBox(height: 20),
           const DashboardLabel('App'),
           ListTile(
