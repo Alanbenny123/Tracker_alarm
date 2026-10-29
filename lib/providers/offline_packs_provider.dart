@@ -104,9 +104,14 @@ class OfflinePacksController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<List<Place>> search(String query, {LatLng? near}) async {
+  Future<List<Place>> search(
+    String query, {
+    LatLng? near,
+    OfflinePack? pack,
+  }) async {
     await load();
-    return _store?.search(packs, query, near: near) ?? [];
+    return _store?.search(pack == null ? packs : [pack], query, near: near) ??
+        [];
   }
 
   Future<List<Place>> nearby(TravelMode mode, LatLng center) async {

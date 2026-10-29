@@ -214,4 +214,40 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('state coverage excludes another location inside its bounding box', () {
+    final pack = OfflinePack.fromJson({
+      'schema': 1,
+      'id': 'sample-state',
+      'name': 'Sample State',
+      'bounds': {'south': 9, 'west': 76, 'north': 12, 'east': 79},
+      'minZoom': 7,
+      'maxZoom': 14,
+      'tileMaxZoom': 12,
+      'placeCount': 1,
+      'coverage': {
+        'type': 'Polygon',
+        'coordinates': [
+          [
+            [76, 9],
+            [77, 9],
+            [77, 10],
+            [76, 10],
+            [76, 9],
+          ],
+          [
+            [76.3, 9.3],
+            [76.7, 9.3],
+            [76.7, 9.7],
+            [76.3, 9.7],
+            [76.3, 9.3],
+          ],
+        ],
+      },
+    }, root);
+    expect(pack.tileMaxZoom, 12);
+    expect(pack.contains(9.1, 76.1), true);
+    expect(pack.contains(9.5, 76.5), false);
+    expect(pack.contains(11, 78), false);
+  });
 }

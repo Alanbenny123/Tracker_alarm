@@ -145,6 +145,11 @@ app.*.symbols
 *.apk
 *.aab
 app.*.map.json
+/offline-packs/builds/
+/offline-packs/sources/
+/.offline-pack-build/
+__pycache__/
+*.pyc
 
 # This is a separate website project, not part of the GPS alarm app
 /mestrie-chatbot/

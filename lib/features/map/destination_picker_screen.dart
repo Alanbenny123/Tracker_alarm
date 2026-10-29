@@ -186,13 +186,14 @@ class _DestinationPickerScreenState
       errorSource = null;
     });
     if (text.length < 3) return;
+    final position = ref.read(locationProvider).position;
     try {
-      final position = ref.read(locationProvider).position;
       final received = offlineMode
           ? await ref
                 .read(offlinePacksProvider)
                 .search(
                   text,
+                  pack: _packForCurrentArea(ref.read(offlinePacksProvider)),
                   near: position == null
                       ? areaCenter
                       : LatLng(position.latitude, position.longitude),
@@ -219,7 +220,15 @@ class _DestinationPickerScreenState
       if (!mounted || generation != searchGeneration) return;
       if (!offlineMode && ref.read(offlinePacksProvider).packs.isNotEmpty) {
         try {
-          final offline = await ref.read(offlinePacksProvider).search(text);
+          final downloaded = ref.read(offlinePacksProvider);
+          final point = position == null
+              ? areaCenter
+              : LatLng(position.latitude, position.longitude);
+          final fallbackPack = point == null
+              ? downloaded.packs.first
+              : downloaded.covering(point.latitude, point.longitude) ??
+                    downloaded.packs.first;
+          final offline = await downloaded.search(text, pack: fallbackPack);
           final matching = widget.sharedPlace
               ? offline.where(SharedPlaceSearchArgs(text).matches).toList()
               : offline;
@@ -228,9 +237,7 @@ class _DestinationPickerScreenState
             setState(() {
               offlineMode = true;
               results = matching;
-              selectedOfflinePack = ref
-                  .read(offlinePacksProvider)
-                  .covering(matching.first.latitude, matching.first.longitude);
+              selectedOfflinePack = fallbackPack;
               searching = false;
               transitNotice = 'Using downloaded offline places.';
             });

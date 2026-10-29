@@ -452,7 +452,7 @@ class _OfflineMapViewState extends State<_OfflineMapView> {
               urlTemplate: widget.pack.tileTemplate,
               tileProvider: fm.FileTileProvider(),
               minNativeZoom: widget.pack.minZoom,
-              maxNativeZoom: widget.pack.maxZoom,
+              maxNativeZoom: widget.pack.tileMaxZoom,
             ),
             if (widget.destination case final destination?)
               fm.CircleLayer(

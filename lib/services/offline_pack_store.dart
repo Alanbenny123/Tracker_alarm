@@ -73,7 +73,9 @@ class OfflinePack {
     required this.east,
     required this.minZoom,
     required this.maxZoom,
+    required this.tileMaxZoom,
     required this.placeCount,
+    this.coverage = const [],
   });
 
   final String id;
@@ -85,13 +87,20 @@ class OfflinePack {
   final double east;
   final int minZoom;
   final int maxZoom;
+  final int tileMaxZoom;
   final int placeCount;
+  final List<OfflineCoveragePolygon> coverage;
 
-  bool contains(double latitude, double longitude) =>
-      latitude >= south &&
-      latitude <= north &&
-      longitude >= west &&
-      longitude <= east;
+  bool contains(double latitude, double longitude) {
+    if (latitude < south ||
+        latitude > north ||
+        longitude < west ||
+        longitude > east) {
+      return false;
+    }
+    return coverage.isEmpty ||
+        coverage.any((polygon) => polygon.contains(latitude, longitude));
+  }
 
   String get tileTemplate => '${directory.path}/tiles/{z}/{x}/{y}.png';
 
@@ -101,6 +110,7 @@ class OfflinePack {
     final bounds = json['bounds'];
     final minZoom = json['minZoom'];
     final maxZoom = json['maxZoom'];
+    final tileMaxZoom = json['tileMaxZoom'] ?? maxZoom;
     final placeCount = json['placeCount'];
     if (json['schema'] != 1 ||
         id is! String ||
@@ -113,6 +123,9 @@ class OfflinePack {
         minZoom < 0 ||
         maxZoom > 18 ||
         minZoom > maxZoom ||
+        tileMaxZoom is! int ||
+        tileMaxZoom < minZoom ||
+        tileMaxZoom > maxZoom ||
         placeCount is! int ||
         placeCount < 0 ||
         placeCount > 2000000) {
@@ -148,8 +161,111 @@ class OfflinePack {
       east: east,
       minZoom: minZoom,
       maxZoom: maxZoom,
+      tileMaxZoom: tileMaxZoom,
       placeCount: placeCount,
+      coverage: OfflineCoveragePolygon.parseCoverage(json['coverage']),
     );
+  }
+}
+
+@immutable
+class OfflineCoveragePolygon {
+  const OfflineCoveragePolygon(this.rings);
+
+  final List<List<LatLng>> rings;
+
+  bool contains(double latitude, double longitude) {
+    if (rings.isEmpty || !_inRing(rings.first, latitude, longitude)) {
+      return false;
+    }
+    for (final hole in rings.skip(1)) {
+      if (_inRing(hole, latitude, longitude)) return false;
+    }
+    return true;
+  }
+
+  static bool _inRing(List<LatLng> ring, double latitude, double longitude) {
+    var inside = false;
+    for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      final a = ring[i];
+      final b = ring[j];
+      if ((a.latitude > latitude) != (b.latitude > latitude) &&
+          longitude <
+              (b.longitude - a.longitude) *
+                      (latitude - a.latitude) /
+                      (b.latitude - a.latitude) +
+                  a.longitude) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  static List<OfflineCoveragePolygon> parseCoverage(Object? raw) {
+    if (raw == null) return const [];
+    if (raw is! Map || raw['type'] is! String || raw['coordinates'] is! List) {
+      throw const FormatException('Invalid offline pack coverage');
+    }
+    final type = raw['type'] as String;
+    final coordinates = raw['coordinates'] as List;
+    final polygons = type == 'Polygon'
+        ? [coordinates]
+        : type == 'MultiPolygon'
+        ? coordinates
+        : throw const FormatException('Invalid offline pack coverage');
+    if (polygons.isEmpty || polygons.length > 1000) {
+      throw const FormatException('Invalid offline pack coverage');
+    }
+    var vertices = 0;
+    return polygons
+        .map((polygon) {
+          if (polygon is! List || polygon.isEmpty || polygon.length > 1000) {
+            throw const FormatException('Invalid offline pack coverage');
+          }
+          return OfflineCoveragePolygon(
+            polygon
+                .map((ring) {
+                  if (ring is! List || ring.length < 4) {
+                    throw const FormatException(
+                      'Invalid offline pack coverage',
+                    );
+                  }
+                  vertices += ring.length;
+                  if (vertices > 100000) {
+                    throw const FormatException(
+                      'Offline pack coverage is too large',
+                    );
+                  }
+                  return ring
+                      .map((coordinate) {
+                        if (coordinate is! List ||
+                            coordinate.length < 2 ||
+                            coordinate[0] is! num ||
+                            coordinate[1] is! num) {
+                          throw const FormatException(
+                            'Invalid offline pack coverage',
+                          );
+                        }
+                        final longitude = (coordinate[0] as num).toDouble();
+                        final latitude = (coordinate[1] as num).toDouble();
+                        if (!longitude.isFinite ||
+                            !latitude.isFinite ||
+                            longitude < -180 ||
+                            longitude > 180 ||
+                            latitude < -90 ||
+                            latitude > 90) {
+                          throw const FormatException(
+                            'Invalid offline pack coverage',
+                          );
+                        }
+                        return LatLng(latitude, longitude);
+                      })
+                      .toList(growable: false);
+                })
+                .toList(growable: false),
+          );
+        })
+        .toList(growable: false);
   }
 }
 
@@ -395,8 +511,16 @@ class OfflinePackStore {
     _placeCache.remove(pack.directory.path);
   }
 
-  Future<List<_OfflineEntry>> _readPlaces(OfflinePack pack) =>
-      _placeCache.putIfAbsent(pack.directory.path, () => _decodePlaces(pack));
+  Future<List<_OfflineEntry>> _readPlaces(OfflinePack pack) {
+    if (!_placeCache.containsKey(pack.directory.path)) {
+      // Keep one region in memory. Users may install many state packs.
+      _placeCache.clear();
+    }
+    return _placeCache.putIfAbsent(
+      pack.directory.path,
+      () => _decodePlaces(pack),
+    );
+  }
 
   Future<List<_OfflineEntry>> _decodePlaces(OfflinePack pack) async {
     final file = File('${pack.directory.path}/places.json');
