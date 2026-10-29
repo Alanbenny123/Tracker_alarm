@@ -10,7 +10,7 @@ import '../models/place.dart';
 import '../models/travel_mode.dart';
 
 const defaultOfflinePackCatalogUrl =
-    'https://raw.githubusercontent.com/Alanbenny123/Tracker_alarm/main/offline-packs/catalog.json';
+    'https://raw.githubusercontent.com/Alanbenny123/offline_maps/main/offline-packs/catalog.json';
 
 @immutable
 class OfflinePackListing {

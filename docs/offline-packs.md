@@ -2,7 +2,7 @@
 
 The app supports separate downloadable OpenStreetMap packs for India's 28 states and 8 union territories. A user can install several regions, such as Kerala and Tamil Nadu, independently from **Settings → Offline maps**. Each pack contains a searchable place list and locally rendered map tiles. Google Maps and Places remain the online option. GPS alarms use the stored destination coordinates after setup and do not require map data or a Places request.
 
-The pack files are built locally under `offline-packs/builds/` and excluded from Git. They are **not available for one-tap download until the ZIPs are uploaded to a public HTTPS host and their real URLs are added to `offline-packs/catalog.json`**. Do not add catalog entries before the files are live. The app reads the catalog from the repository's `main` branch; users may also paste a direct HTTPS link.
+The pack files are built locally under `offline-packs/builds/` and excluded from Git. The app reads the catalog from the public `Alanbenny123/offline_maps` repository at `offline-packs/catalog.json` on its `main` branch. The ZIP files are hosted as assets of its `offline-india-2026-10` release. The `offline-packs/catalog.json` file in this private app repository is not used by the app. Users may also paste a direct HTTPS pack link.
 
 ## Build all regions
 
@@ -22,11 +22,11 @@ The ZIP root contains `pack.json`, `places.json`, and `tiles/{zoom}/{x}/{y}.png`
 
 1. Upload each ZIP as a separate static HTTPS asset, for example to a public GitHub Release. Keep the files out of the Git repository itself.
 2. Verify every asset URL downloads the correct ZIP. Use the manifest's SHA-256 digest to check uploads.
-3. Generate a catalog draft using the real asset directory URL, verify its links, and copy it to `offline-packs/catalog.json` on `main`:
+3. Generate a catalog draft using the release asset directory URL, verify its links, and copy it to `offline-packs/catalog.json` on the public `offline_maps` repository's `main` branch:
 
 ```sh
 python3 tools/build_india_offline_packs.py catalog \
-  --base-url https://github.com/OWNER/REPO/releases/download/RELEASE_TAG
+  --base-url https://github.com/Alanbenny123/offline_maps/releases/download/offline-india-2026-10
 ```
 
 The draft is saved as `offline-packs/builds/catalog-to-publish.json`. An individual entry looks like:
