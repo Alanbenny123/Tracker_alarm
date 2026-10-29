@@ -14,6 +14,7 @@ class OfflineMapsScreen extends ConsumerStatefulWidget {
 
 class _OfflineMapsScreenState extends ConsumerState<OfflineMapsScreen> {
   final link = TextEditingController();
+  final regionSearch = TextEditingController();
 
   @override
   void initState() {
@@ -26,6 +27,7 @@ class _OfflineMapsScreenState extends ConsumerState<OfflineMapsScreen> {
   @override
   void dispose() {
     link.dispose();
+    regionSearch.dispose();
     super.dispose();
   }
 
@@ -80,6 +82,17 @@ class _OfflineMapsScreenState extends ConsumerState<OfflineMapsScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = ref.watch(offlinePacksProvider);
+    final query = regionSearch.text.trim().toLowerCase();
+    bool matchesRegion(String name, String id) =>
+        query.isEmpty ||
+        name.toLowerCase().contains(query) ||
+        id.replaceAll('-', ' ').toLowerCase().contains(query);
+    final installed = controller.packs
+        .where((pack) => matchesRegion(pack.name, pack.id))
+        .toList();
+    final available = controller.catalog
+        .where((listing) => matchesRegion(listing.name, listing.id))
+        .toList();
     final progress = controller.totalBytes == null || controller.totalBytes == 0
         ? null
         : (controller.receivedBytes / controller.totalBytes!).clamp(0.0, 1.0);
@@ -92,6 +105,26 @@ class _OfflineMapsScreenState extends ConsumerState<OfflineMapsScreen> {
             'Download a prepared OpenStreetMap pack while online. You can keep several regions on your phone. A pack includes map tiles and searchable places; GPS alarms use no map connection after a destination is set.',
           ),
           const SizedBox(height: 20),
+          TextField(
+            controller: regionSearch,
+            onChanged: (_) => setState(() {}),
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Search states or regions',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: query.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear region search',
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        regionSearch.clear();
+                        setState(() {});
+                      },
+                    ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Text(
             'Installed regions',
             style: Theme.of(context).textTheme.titleMedium,
@@ -101,7 +134,12 @@ class _OfflineMapsScreenState extends ConsumerState<OfflineMapsScreen> {
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Text('No offline regions installed yet.'),
             ),
-          for (final pack in controller.packs)
+          if (controller.packs.isNotEmpty && installed.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Text('No installed regions match your search.'),
+            ),
+          for (final pack in installed)
             Card(
               child: ListTile(
                 leading: const Icon(Icons.offline_pin_outlined),
@@ -147,7 +185,14 @@ class _OfflineMapsScreenState extends ConsumerState<OfflineMapsScreen> {
               padding: EdgeInsets.symmetric(vertical: 8),
               child: Text('No regional packs have been published yet.'),
             ),
-          for (final listing in controller.catalog)
+          if (!controller.loadingCatalog &&
+              controller.catalog.isNotEmpty &&
+              available.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('No available regions match your search.'),
+            ),
+          for (final listing in available)
             ListTile(
               leading: const Icon(Icons.map_outlined),
               title: Text(listing.name),

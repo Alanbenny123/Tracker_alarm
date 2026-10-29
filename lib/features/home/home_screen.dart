@@ -281,6 +281,19 @@ class _HomeTab extends ConsumerWidget {
                     ),
                   ),
                   Positioned(
+                    right: 16,
+                    bottom: 104,
+                    child: ActionChip(
+                      avatar: const Icon(Icons.offline_pin_outlined, size: 18),
+                      label: const Text('Offline maps'),
+                      backgroundColor: scheme.surfaceContainerHigh.withValues(
+                        alpha: 0.9,
+                      ),
+                      side: BorderSide(color: scheme.outlineVariant),
+                      onPressed: () => context.push('/offline-maps'),
+                    ),
+                  ),
+                  Positioned(
                     left: 16,
                     right: 16,
                     bottom: 16,

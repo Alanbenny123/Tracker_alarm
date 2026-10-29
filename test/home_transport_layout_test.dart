@@ -45,6 +45,7 @@ void main() {
       ),
     );
     await tester.pump();
+    expect(find.text('Offline maps'), findsOneWidget);
     expect(find.text('Railway'), findsOneWidget);
     final bus = tester.getTopLeft(find.text('Bus'));
     final metro = tester.getTopLeft(find.text('Metro'));

@@ -1,6 +1,6 @@
 # Offline India region packs
 
-The app supports separate downloadable OpenStreetMap packs for India's 28 states and 8 union territories. A user can install several regions, such as Kerala and Tamil Nadu, independently from **Settings → Offline maps**. Each pack contains a searchable place list and locally rendered map tiles. Google Maps and Places remain the online option. GPS alarms use the stored destination coordinates after setup and do not require map data or a Places request.
+The app supports separate downloadable OpenStreetMap packs for India's 28 states and 8 union territories. A user can open **Offline maps** from the home map preview or Settings, search for a state or region, and install several packs such as Kerala and Tamil Nadu independently. Each pack contains a searchable place list and locally rendered map tiles. Google Maps and Places remain the online option. GPS alarms use the stored destination coordinates after setup and do not require map data or a Places request.
 
 The pack files are built locally under `offline-packs/builds/` and excluded from Git. The app reads the catalog from the public `Alanbenny123/offline_maps` repository at `offline-packs/catalog.json` on its `main` branch. The ZIP files are hosted as assets of its `offline-india-2026-10` release. The `offline-packs/catalog.json` file in this private app repository is not used by the app. Users may also paste a direct HTTPS pack link.
 
