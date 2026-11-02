@@ -217,7 +217,7 @@ class _TrackerAlarmAppState extends ConsumerState<TrackerAlarmApp>
       controller: ref.read(alarmProvider),
       child: MaterialApp.router(
         scaffoldMessengerKey: _messengerKey,
-        title: 'Destination Alarm',
+        title: 'All in One Destination Alarm',
         debugShowCheckedModeBanner: false,
         theme: createAppTheme(Brightness.light),
         darkTheme: createAppTheme(Brightness.dark),

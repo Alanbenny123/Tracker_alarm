@@ -66,7 +66,7 @@ class GuideScreen extends StatelessWidget {
           icon: Icons.share_location_outlined,
           title: 'Sharing from Google Maps',
           points: [
-            'In Google Maps, open a place, tap Share, and choose Destination Alarm. Wait while the shared link is read (up to 12 seconds), or tap Cancel. Then check the place on the setup screen.',
+            'In Google Maps, open a place, tap Share, and choose All in One Destination Alarm. Wait while the shared link is read (up to 12 seconds), or tap Cancel. Then check the place on the setup screen.',
             'If opening a link fails, tap Retry. The app can retry Google short links with an HTTPS DNS fallback; your phone’s DNS settings are not changed. It does not automatically search a generic business name after a connection failure.',
             'If a shared link has no coordinates, the app searches its full place name and address. Select the correct result, check its map pin and coordinates, then tap Confirm destination. If none match, refine the address or tap the correct map point. Link resolution and place search need internet.',
             'If you share a second place while the first link is still opening, the latest share takes priority.',

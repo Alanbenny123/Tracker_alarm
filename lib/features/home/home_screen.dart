@@ -88,7 +88,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             children: [
               Icon(Icons.notifications_active_outlined, size: 64),
               SizedBox(height: 20),
-              Text('Destination Alarm'),
+              Text('All in One Destination Alarm'),
               SizedBox(height: 20),
               CircularProgressIndicator(),
             ],
@@ -222,7 +222,7 @@ class _HomeTab extends ConsumerWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Destination Alarm',
+                  'All in One Destination Alarm',
                   style: Theme.of(context).textTheme.titleLarge
                       ?.copyWith(fontWeight: FontWeight.w800),
                 ),
@@ -1036,7 +1036,7 @@ class _SettingsTab extends ConsumerWidget {
           ),
           const ListTile(
             title: Text('About'),
-            subtitle: Text('Destination Alarm 1.0'),
+            subtitle: Text('All in One Destination Alarm 1.0'),
           ),
         ],
       ),
