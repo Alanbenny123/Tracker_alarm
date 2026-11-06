@@ -1,8 +1,8 @@
-# Destination Alarm privacy policy
+# All in One Destination Alarm privacy policy
 
-Last updated: 19 October 2026
+Last updated: 7 November 2026
 
-Destination Alarm uses your location to show your position, find nearby destinations, and ring alarms when you approach a destination. With an alarm active, the app accesses location while it is in the background or your screen is locked. It runs an Android foreground service and displays a persistent monitoring notification. You can stop an alarm in the app or from its notification, and you can revoke location access in Android settings.
+All in One Destination Alarm uses your location to show your position, find nearby destinations, and ring alarms when you approach a destination. With an alarm active, the app accesses location while it is in the background or your screen is locked. It runs an Android foreground service and displays a persistent monitoring notification. You can stop an alarm in the app or from its notification, and you can revoke location access in Android settings.
 
 ## Information kept on your device
 
@@ -24,4 +24,4 @@ This version does not display ads or use an advertising SDK. If ads or analytics
 
 ## Contact
 
-For privacy questions or deletion help, open an issue at [the Destination Alarm project](https://github.com/Alanbenny123/Tracker_alarm/issues). You can also delete the app's local data through Settings or Android's app storage controls.
+For privacy questions or deletion help, open an issue at [the All in One Destination Alarm project](https://github.com/Alanbenny123/Tracker_alarm/issues). You can also delete the app's local data through Settings or Android's app storage controls.
